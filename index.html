@@ -1644,7 +1644,7 @@ function walkScene(){
   S.scene='street';S.pose='stand';S.jonas=false;S.mode='talk';S.teary=true;
   const br=S.breathRe;
   if(br==='pure'){
-    return beat('l','"Du warst ganz weg da drin, non? Isch glaub, isch hab gesehen, wie dein Seele über die geschwebt hat."',[
+    return beat('l','"Du warst ganz weg da drin, non? Isch glaub, isch hab gesehen, wie dein Seele über dir geschwebt hat."',[
       {t:'"Du solltest bei deiner eigenen Atmung bleiben."',go:()=>{S.sym+=2;rk('good');reply('l','"Isch war bei meiner. Deine war halt sehr laut."',walkSpaeti);}},
       {t:'"Ich hab nichts mitbekommen. Nicht mal dich."',go:()=>{S.sym+=2;rk('good');walkSpaeti();}},
       {t:'"Ja ich glaub ich hatte eine Out-Of-Body-Experience."',go:()=>{S.sym+=1;rk('ok');reply('l','"Hm.... Dad Bod Experience?"',walkSpaeti);}}

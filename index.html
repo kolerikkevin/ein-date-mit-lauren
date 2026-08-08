@@ -720,11 +720,11 @@ function figure(cx,top,s,P,t,breath,sitting,phase,blinkOff,mood,age,talking,walk
 
   /* ---------- Arme + Requisit in der Hand ---------- */
   const drawProp=(hx,hyy)=>{
-    if(prop==='riegel'){
-      c.save();c.translate(hx,hyy);c.rotate(-0.5);
-      c.beginPath();c.rect(-3,-13,6,15);F('#6a3a1c');
-      c.fillStyle='#c8a03c';c.fillRect(-3,-13,6,5.5);
-      c.fillStyle='#4e2a14';c.fillRect(-3,-7,6,1.4);
+    if(prop==='riegel'||prop==='bar'){
+      c.save();c.translate(hx,hyy);c.rotate(prop==='bar'?-0.9:-0.5);
+      c.beginPath();c.rect(-3,-13,6,15);F(prop==='bar'?'#2a2620':'#6a3a1c');   // ungeöffnet: dunkle Koro-Folie
+      c.fillStyle=prop==='bar'?'#d8d2c4':'#c8a03c';c.fillRect(-3,-13,6,5.5);
+      c.fillStyle=prop==='bar'?'#8a8478':'#4e2a14';c.fillRect(-3,-7,6,1.4);
       c.restore();
     }else if(prop==='phone'){
       c.save();c.translate(hx+3,hyy-8);c.rotate(-0.35);
@@ -750,16 +750,9 @@ function figure(cx,top,s,P,t,breath,sitting,phase,blinkOff,mood,age,talking,walk
     if(!scratching){ limb([[HX+11,shY+3],[HX+17,shY+13],[39,48]],4.6,P.jacket||P.topDk); hand(39,51,5.2); }
   }else{
     if(prop==='riegel'&&Math.sin(t/850)>0.1){
-      // Sie hebt den Riegel zum Mund und beißt ab
+      // Sie beißt ab — Arm und Riegel werden erst NACH dem Kopf gezeichnet,
+      // sonst verschwindet beides hinter dem Riesenkopf (siehe unten bei chewing)
       chewing=true;
-      limb([[HX-11,shY+3],[HX-20,shY+9],[HX-11,27]],4.6,P.jacket||P.topDk);
-      hand(HX-10,27.5,5.2);
-      c.save();c.translate(HX-9,25.5);c.rotate(1.9);
-      c.beginPath();c.rect(-3,-12,6,14);F('#6a3a1c');
-      c.fillStyle='#c8a03c';c.fillRect(-3,0,6,2);
-      c.fillStyle='#4e2a14';c.fillRect(-3,-11,6,1.4);
-      c.restore();
-      c.fillStyle=P.skin;c.beginPath();c.ellipse(HX-10,26.5,2.4,1.7,0.35,0,7);c.fill();
     }else{
       limb([[HX-11,shY+3],[HX-17,shY+13],[HX-15,55]],4.6,P.jacket||P.topDk);
       hand(HX-15,60,5.6);
@@ -938,6 +931,19 @@ function figure(cx,top,s,P,t,breath,sitting,phase,blinkOff,mood,age,talking,walk
     hand(HX+17,1.5+hy+j,4.6);
   }
 
+  // Riegel zum Mund führen — vor dem Gesicht, damit man das Abbeißen sieht
+  if(chewing){
+    const mox=HX+fx, moy=ey+9.6, hax=mox-9.5, hay=moy+9.5;
+    limb([[HX-11,shY+3],[HX-19,shY+13],[hax,hay]],4.6,P.jacket||P.topDk);
+    hand(hax,hay,5.2);
+    c.save();c.translate(hax,hay);c.rotate(0.77);
+    c.beginPath();c.rect(-3,-13,6,15);F('#6a3a1c');
+    c.fillStyle='#c8a03c';c.fillRect(-3,0,6,2);          // angebissenes Ende
+    c.fillStyle='#4e2a14';c.fillRect(-3,-12,6,1.4);
+    c.restore();
+    c.fillStyle=P.skin;c.beginPath();c.ellipse(hax,hay,2.4,1.7,0.35,0,7);c.fill();
+  }
+
   /* Rimlight */
   c.strokeStyle='rgba(255,224,170,0.5)';c.lineWidth=1.1;
   c.beginPath();c.moveTo(HX+10,5+hy);c.quadraticCurveTo(HX+15,14+hy,HX+12.5,24+hy);c.stroke();
@@ -1070,10 +1076,74 @@ function sceneFront(t){
     const tx=160+(x-160)*0.45;
     poly([[x,200],[x+3,200],[tx+2,124+((tx-160)*0.08)],[tx,124+((tx-160)*0.08)]],'rgba(12,10,30,0.45)');
   }
-  // Kundenstopper vorm Studio (lesbarer als die alte Fahrrad-Strichfigur)
-  poly([[14,140],[40,142],[44,172],[10,170]],'#241c30');
-  poly([[17,144],[37,146],[40,168],[14,166]],'#e8ddb8');
-  px(19,150,16,2,'#8a7a9a');px(19,155,13,2,'#8a7a9a');px(19,160,15,2,'#b8562e');
+  // Kundenstopper, jetzt rechts neben der Tür (links steht Kevins Rad)
+  poly([[288,148],[312,150],[316,178],[284,176]],'#241c30');
+  poly([[291,152],[309,154],[312,174],[288,172]],'#e8ddb8');
+  px(293,158,15,2,'#8a7a9a');px(293,163,12,2,'#8a7a9a');px(293,168,14,2,'#b8562e');
+  // Kevins E-Bike, am Laternenmast abgestellt — er ist damit gekommen
+  ctx.save();ctx.scale(1.5,1.5);
+  const bY=165, w1=17, w2=71, R=12.5;
+  ctx.lineCap='round';
+  // Reifen
+  ctx.strokeStyle='#15111f';ctx.lineWidth=3.4;
+  ctx.beginPath();ctx.arc(w1,bY,R,0,7);ctx.stroke();
+  ctx.beginPath();ctx.arc(w2,bY,R,0,7);ctx.stroke();
+  // Felgen + ein paar Speichen
+  ctx.strokeStyle='#6b6490';ctx.lineWidth=1;
+  ctx.beginPath();ctx.arc(w1,bY,R-2.8,0,7);ctx.stroke();
+  ctx.beginPath();ctx.arc(w2,bY,R-2.8,0,7);ctx.stroke();
+  ctx.strokeStyle='rgba(140,134,180,0.5)';ctx.lineWidth=0.5;
+  for(let a=0;a<6;a++){const an=a*Math.PI/3;
+    ctx.beginPath();ctx.moveTo(w1,bY);ctx.lineTo(w1+Math.cos(an)*(R-3),bY+Math.sin(an)*(R-3));ctx.stroke();
+    ctx.beginPath();ctx.moveTo(w2,bY);ctx.lineTo(w2+Math.cos(an)*(R-3),bY+Math.sin(an)*(R-3));ctx.stroke();}
+  // Rahmen (Tiefeinsteiger, wie ein Trekking-E-Bike)
+  const bb={x:44,y:158};            // Tretlager
+  ctx.strokeStyle='#3d7ba6';ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(24,141);ctx.lineTo(bb.x,bb.y);ctx.stroke();          // Unterrohr, tief eingezogen
+  ctx.beginPath();ctx.moveTo(bb.x,bb.y);ctx.lineTo(56,140);ctx.stroke();          // Sattelrohr
+  ctx.beginPath();ctx.moveTo(24,141);ctx.lineTo(56,140);ctx.stroke();             // Oberrohr
+  ctx.beginPath();ctx.moveTo(bb.x,bb.y);ctx.lineTo(w2,bY);ctx.stroke();           // Kettenstrebe
+  ctx.beginPath();ctx.moveTo(56,140);ctx.lineTo(w2,bY);ctx.stroke();              // Sitzstrebe
+  // Akku im Unterrohr — das E am E-Bike
+  ctx.strokeStyle='#1e2c44';ctx.lineWidth=4.4;
+  ctx.beginPath();ctx.moveTo(28,145);ctx.lineTo(40,153.5);ctx.stroke();
+  ctx.strokeStyle='#7fd8c8';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(30,146.6);ctx.lineTo(37.5,152);ctx.stroke();
+  // Mittelmotor + Kurbel
+  ctx.fillStyle='#2a3550';ctx.beginPath();ctx.arc(bb.x,bb.y,4.4,0,7);ctx.fill();
+  ctx.strokeStyle='#5a6a90';ctx.lineWidth=1;ctx.beginPath();ctx.arc(bb.x,bb.y,4.4,0,7);ctx.stroke();
+  ctx.strokeStyle='#8c93b4';ctx.lineWidth=1.4;
+  ctx.beginPath();ctx.moveTo(bb.x,bb.y);ctx.lineTo(bb.x+5,bb.y+4);ctx.stroke();
+  // Gabel + Steuerrohr
+  ctx.strokeStyle='#3d7ba6';ctx.lineWidth=2.6;
+  ctx.beginPath();ctx.moveTo(w1,bY);ctx.lineTo(24,141);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(24,141);ctx.lineTo(26,134);ctx.stroke();
+  // Lenker mit Griffen + Display
+  ctx.strokeStyle='#1d1a2c';ctx.lineWidth=2.2;
+  ctx.beginPath();ctx.moveTo(18,133);ctx.lineTo(34,135);ctx.stroke();
+  ctx.strokeStyle='#4a4a62';ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(18,133);ctx.lineTo(21.5,133.4);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(31,134.6);ctx.lineTo(34,135);ctx.stroke();
+  ctx.fillStyle='#0e1420';ctx.fillRect(24,128.5,6.4,4.4);
+  ctx.fillStyle='#8fe6d2';ctx.fillRect(24.9,129.4,4.6,2.6);
+  // Sattel + Sattelstütze
+  ctx.strokeStyle='#4a4a62';ctx.lineWidth=1.8;
+  ctx.beginPath();ctx.moveTo(56,140);ctx.lineTo(58,132);ctx.stroke();
+  ctx.fillStyle='#1d1a2c';
+  ctx.beginPath();ctx.ellipse(58,131,6,2.6,-0.08,0,7);ctx.fill();
+  // Gepäckträger hinten
+  ctx.strokeStyle='#4a4a62';ctx.lineWidth=1.4;
+  ctx.beginPath();ctx.moveTo(58,136);ctx.lineTo(w2+7,138);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(w2+7,138);ctx.lineTo(w2+3,bY-6);ctx.stroke();
+  // Frontlicht wirft einen kleinen Kegel auf den Gehweg
+  ctx.fillStyle='#ffe9a8';ctx.fillRect(17.5,137.5,2.6,2.4);
+  ctx.fillStyle='rgba(255,233,168,0.10)';
+  ctx.beginPath();ctx.moveTo(18,140);ctx.lineTo(0,164);ctx.lineTo(0,178);ctx.lineTo(21,168);ctx.closePath();ctx.fill();
+  // Schatten unter den Rädern
+  ctx.fillStyle='rgba(10,6,20,0.30)';
+  ctx.beginPath();ctx.ellipse(w1,bY+11,8,2.2,0,0,7);ctx.fill();
+  ctx.beginPath();ctx.ellipse(w2,bY+11,8,2.2,0,0,7);ctx.fill();
+  ctx.restore();
   PS=1;
 }
 
@@ -1387,18 +1457,18 @@ function skipTyping(){
 
 /* ================= AKT 1 — Smalltalk ================= */
 const RAW=[
- {sc:'front',who:'l',txt:'"Du bist Kevin, non? Von dem Profil mit dem Fahrradhelm. Isch bin Lauren."',hint:'Vor dem Studio, ein Novemberabend, zehn vor acht',o:[
-   ['"Der Helm war ein Statement."',1,0,'l','"Über was?" — "Über Sicherheit." — "Mon dieu. Das ist so unsexy, dass es fast wieder geht."'],
+ {sc:'front',who:'l',txt:'"Du bist Kevin, non? Der mit dem E-Bike aus dem Chat. Isch bin Lauren."',hint:'Vor dem Studio, ein Novemberabend, zehn vor acht',o:[
+   ['"Es ist ein E-Bike. Das E ist wichtig."',1,0,'l','"Warum?" — "Damit ich nicht verschwitzt ankomme." — "Mon dieu. Das ist so unsexy, dass es fast wieder geht."'],
    ['"Ja. Und du hattest das Gedicht im Profil."',2,0,'l','"Du hast es gelesen! Niemand liest die Prompts. Niemand. Warte — hatte isch eine Frage gestellt? Egal."'],
    ['"Nein."',1,1,'l','Sie schaut dich drei Sekunden an. "Doch. Isch spüre dein Feld. Es ist ein Kevin-Feld."'],
-   ['"Ich bin\'s. Und du bist Lauren, vom Profil mit dem, äh, Profil."',0,2,'l','"Ja. Isch habe eins. Das ist Voraussetzung bei der App."']
+   ['Du schließt betont langsam das Rad ab.',0,2,'l','"Es steht vor einem Yogastudio. Hier klaut niemand. Hier atmet man nur."']
  ]},
- {sc:'front',who:'n',txt:'Drinnen läuft schon Musik. Sie kramt in der Jacke und holt einen Proteinriegel raus.',hint:'Noch draußen, keiner will reingehen',o:[
-   ['"Isst du den jetzt? Vor dem Atmen?"',2,0,'l','"Danach kann isch nicht essen, da bin isch zu weit weg. Cookie Dough. Willst du die Hälfte?"'],
-   ['"Sollen wir? Oder noch kurz stehen bleiben?"',2,0,'l','"Noch kurz stehen bleiben." Sie sagt es sofort, ohne nachzudenken. Ihr steht noch zwei Minuten.'],
-   ['Du hältst ihr die Tür auf, bevor sie fertig gekaut hat.',1,1,'l','Sie geht rein, mit vollem Mund, und schaut dich dabei vorwurfsvoll an.'],
-   ['"Ich hab gehört, hier drin muss man barfuß."',0,2,'l','"Ehm. Ja. Es ist ein Yogastudio." Sie schaut kurz die Straße runter.']
- ]},
+ {sc:'front',who:'n',txt:'Drinnen läuft schon Musik. Keiner geht rein. Du kramst in der Jackentasche: der Riegel aus dem Chat. Koro, Schokolade, vegan.',hint:'Der Opener wird eingelöst',o:[
+   ['"Ich war noch schnell beim Rewe. Wie besprochen."',2,0,'l','"Den gibt es nisch beim Rewe." — "Ich weiß." Sie schaut den Riegel an wie ein Beweisstück. "Du hast einen Umweg gemacht. Für einen Riegel."'],
+   ['"Du hast auf ‚Soll ich dir was mitbringen?‘ tatsächlich geantwortet."',2,0,'l','"Isch antworte immer. Die Leute fragen nur nie ernst." Sie reißt ihn sofort auf. "Du hast ernst gefragt."'],
+   ['"Isst du den jetzt? Vor dem Atmen?"',1,0,'l','"Danach kann isch nisch essen, da bin isch zu weit weg." Sie beißt ab. "Willst du die Hälfte? Es ist ja deiner."'],
+   ['"Der war im Angebot."',0,2,'l','"Der ist nie im Angebot." Lange Pause, in der sie ihn trotzdem auspackt. "Aber merci."']
+ ],after:()=>{S.barGiven=true;}},
  {sc:'studio',who:'n',txt:'Drinnen. SCHUHE AUS steht an der Wand. Sie steckt den Riegelrest weg und ist schon raus aus ihren Schuhen. Deine Cap bleibt auf. Niemand sagt etwas. Alle denken es.',hint:'Die Socken-Frage',o:[
    ['"Ich hab extra Socken ohne Löcher angezogen."',1,0,'l','"Extra für misch?" — "Für den Raum." — "Für den Raum. Bien sûr."'],
    ['Ein Loch ist da. Sie sieht es.',1,1,'l','"Das ist ein Fenster", sagt sie. "Damit der Zeh was sieht." Pause. "Das war ein Vers, den nehm isch mit."'],
@@ -1437,10 +1507,13 @@ function talkBeat(){
   if(ti>=RAW.length)return preGauntlet();
   const b=RAW[ti];
   S.scene=b.sc;S.pose='stand';S.jonas=(b.who==='j'||!!b.jon);
-  S.riegel=(b.sc==='front'&&ti>=1);            // ab dem Riegel-Beat isst sie sichtbar
+  // Der Riegel wandert: erst in Kevins Hand, nach der Übergabe isst sie ihn sichtbar
+  S.kbar=(b.sc==='front'&&!S.barGiven);
+  S.riegel=(b.sc==='front'&&!!S.barGiven);
   beat(b.who,b.txt,b.o.map(o=>({t:o[0],go:()=>{
     S.sym+=o[1];S.cringe+=o[2];
     feedback(o[1],o[2]);
+    if(b.after){b.after();S.kbar=false;S.riegel=(b.sc==='front');}
     line(o[3],o[4]);
     opts([{t:'…',go:()=>{ti++;SFX.page();talkBeat();}}],'Weiter');
   }})),b.hint);
@@ -1584,10 +1657,10 @@ function walkScene(){
 }
 function walkSpaeti(){
   S.scene='street';S.pose='stand';S.jonas=false;S.mode='talk';S.teary=true;
-  beat('l','Sie nickt Richtung Kiosk-Licht. "Isch brauche jetzt Zucker. Der Riegel war Pappe. Spezi?"',[
+  beat('l','Sie nickt Richtung Kiosk-Licht. "Isch brauche jetzt Zucker. Dein Riegel war Pappe — sag das nisch weiter. Spezi?"',[
     {t:'"Spezi. Aber die richtige, nicht die mit Kirschgeschmack."',go:()=>{S.sym+=2;rk('good');S.bottle=true;walk2();}},
     {t:'"Zwei. Ich zahl."',go:()=>{S.sym+=1;rk('ok');S.bottle=true;reply('l','"Oh. Ein Mann, der am Kiosk groß aufspielt." Sie meint es zur Hälfte spöttisch. Die andere Hälfte nimmt die Spezi.',walk2);}},
-    {t:'"Du hattest doch gerade erst einen Riegel."',go:()=>{S.sym+=2;rk('good');S.bottle=true;reply('l','"Das war vor dem Atmen. Isch bin jetzt ein anderer Mensch. Der Mensch will Spezi."',walk2);}},
+    {t:'"Du hattest doch gerade erst den Riegel, den ich extra geholt hab."',go:()=>{S.sym+=2;rk('good');S.bottle=true;reply('l','"Das war vor dem Atmen. Isch bin jetzt ein anderer Mensch. Der Mensch will Spezi."',walk2);}},
     {t:'"Ich trinke eigentlich keinen Zucker mehr." (Du trinkst Zucker.)',go:()=>{S.cringe++;rk('meh');S.bottle=true;reply('l','"Ehm. Du hältst gerade eine Spezi." — "Die ist für dich." — "Isch habe schon eine." Es entsteht eine Stille mit zwei Flaschen.',walk2);}}
   ],'Nach dem Kurs, am Kiosk');
 }
@@ -1643,8 +1716,8 @@ function revealStep(n){
   if(score>=14){
     SFX.end();react('laugh');S.phoneHand=true;
     line('l','"Warte." Sie dreht dir ihr Handy hin. Da steht schon eine getippte, noch nicht abgeschickte Nachricht: "Samstag?" — "Isch wollte nur nisch die Erste sein."');
-    opts([{t:'"Samstag."',go:()=>{rk('good');line('l','"Samstag. Isch bring die Riegel, du bringst die Spezi. Und den Helm."');
-      opts([{t:'…',go:()=>startTram({yes:true,msg:'Samstag? — habe es endlisch abgeschickt. Riegel: isch. Spezi und Helm: du. ✦',after:'Sie winkt durch die Scheibe, mit beiden Händen, wie ein Kind. Lesen wirst du ihre Nachricht erst am Morgen.'})}],'Ihre Tram kommt');}}],'Sie hatte es schon getippt');
+    opts([{t:'"Samstag."',go:()=>{rk('good');line('l','"Samstag. Du bringst die Riegel — du weißt ja inzwischen, wo es sie nisch gibt. Isch bringe die Spezi. Und komm mit dem Rad."');
+      opts([{t:'…',go:()=>startTram({yes:true,msg:'Samstag? — habe es endlisch abgeschickt. Riegel: du. Spezi: isch. E-Bike: nisch vergessen. ✦',after:'Sie winkt durch die Scheibe, mit beiden Händen, wie ein Kind. Lesen wirst du ihre Nachricht erst am Morgen.'})}],'Ihre Tram kommt');}}],'Sie hatte es schon getippt');
   }else if(score>=8){
     SFX.end();react('laugh');
     line('l','"Ja." Sie sagt es sofort, ohne die Pause, die du erwartet hast. "Aber diesmal ohne Jonas."');
@@ -1653,7 +1726,7 @@ function revealStep(n){
   }else if(score>=4){
     SFX.ok();react('scratch');
     line('l','"Ehm." Sie überlegt wirklich, das sieht man. "Isch weiß es noch nisch. Aber isch weiß auch nisch Nein. Das ist besser als es klingt, glaub mir."');
-    opts([{t:'"Das nehm ich."',go:()=>{rk('ok');line('l','"Gut. Dann lass isch disch das nehmen." Sie kramt in der Jacke und drückt dir einen halben Proteinriegel in die Hand. "Anzahlung."');
+    opts([{t:'"Das nehm ich."',go:()=>{rk('ok');line('l','"Gut. Dann lass isch disch das nehmen." Sie kramt in der Jacke und drückt dir den halben Riegel zurück in die Hand. "Anzahlung. Er war ja eh von dir."');
       opts([{t:'…',go:()=>startTram({yes:true,msg:'Okay: Ja. Frag misch nisch, warum isch grinse.',card:'ZWEI MORGEN SPÄTER',after:'Zwei Tage lang nichts. Dann, am dritten Morgen, ohne Anlass: Sie kommt.'})}],'Ihre Tram kommt');}}],'Sie zögert ehrlich');
   }else{
     SFX.endBad();react('roll');
@@ -1721,7 +1794,7 @@ function reset(){
   S.scene='front';S.cringe=0;S.sym=0;S.fails=0;S.waves=0;S.jonas=false;
   S.pose='stand';S.mode='talk';S.run=null;ti=0;breathStop();
   S.tram=null;S.gone=false;S.mood='neutral';S.moodT=0;S.moodStart=0;
-  S.breathRe=null;S.riegel=false;S.bottle=false;S.teary=false;
+  S.breathRe=null;S.riegel=false;S.kbar=false;S.barGiven=false;S.bottle=false;S.teary=false;
   S.cringeWarned=false;S.phone=null;S.autoNext=null;S.autoT=0;S.who='n';S.phoneHand=false;
   S.mode='title';S.full='';S.typing=false;
   opts([],'Ein Abend in München — '+(TOUCH?'tipp':'klick')+' ins Bild');
@@ -1787,22 +1860,8 @@ function frame(t){
   else if(S.scene==='front'){ lx=296; ly=84; }
   else { lx=298; ly=82; }
 
-  // Kevin — du selbst, links im Bild, ihr zugewandt
-  if(S.mode!=='end'||!S.phone){
-    const kSit=(S.scene==='studio'&&S.pose==='sit');
-    let kx,ky;
-    if(S.scene==='studio'){kx=kSit?148:104;ky=kSit?116:56;}   // sitzend: auf SEINER Matte
-    else if(S.scene==='front'){kx=112;ky=84;}
-    else if(S.mode==='tram'){kx=20;ky=98;}                    // tritt zurück — Tram fährt nicht durch ihn durch
-    else {kx=104;ky=82;}
-    const ksc=(S.scene==='street')?1.8:2;
-    const kfeet=kSit?ky+134:Math.round(ky+89*ksc);
-    PS=1;px(kx+10,kfeet,Math.round(38*ksc),7,'rgba(10,6,20,0.32)');
-    const kProp=(S.scene==='street'&&S.bottle)?'bottle':null;
-    const kBreath=(S.mode==='play')?S.breath:0.5+0.5*Math.sin(t/1000+2);
-    S._kx=kx;
-    figure(kx,ky,ksc,KEVFIG,t,kBreath,kSit,0.6,false,(S.mode==='play')?'medi':'neutral',0,S.typing&&S.who==='k',false,kProp,1,S.scene==='studio');
-  }
+  // Kevin wird erst NACH der Tram gezeichnet (siehe unten) — er steht am Bahnsteig davor,
+  // die Tram fährt hinter ihm durch.
 
   /* Tram-Sequenz */
   if(S.mode==='tram'&&S.tram){
@@ -1846,6 +1905,23 @@ function frame(t){
       ctx.restore();
     }
     if(el>8.6&&!S.tram.done){S.tram.done=true;tramDone();}
+  }
+
+  // Kevin — du selbst, links im Bild, ihr zugewandt (nach der Tram gezeichnet = er steht davor)
+  if(S.mode!=='end'||!S.phone){
+    const kSit=(S.scene==='studio'&&S.pose==='sit');
+    let kx,ky;
+    if(S.scene==='studio'){kx=kSit?148:104;ky=kSit?116:56;}   // sitzend: auf SEINER Matte
+    else if(S.scene==='front'){kx=112;ky=84;}
+    else if(S.mode==='tram'){kx=56;ky=96;}                    // am Bahnsteig, näher an der Kamera
+    else {kx=104;ky=82;}
+    const ksc=(S.scene==='street')?1.8:2;
+    const kfeet=kSit?ky+134:Math.round(ky+89*ksc);
+    PS=1;px(kx+10,kfeet,Math.round(38*ksc),7,'rgba(10,6,20,0.32)');
+    const kProp=(S.scene==='street'&&S.bottle)?'bottle':(S.scene==='front'&&S.kbar)?'bar':null;
+    const kBreath=(S.mode==='play')?S.breath:0.5+0.5*Math.sin(t/1000+2);
+    S._kx=kx;
+    figure(kx,ky,ksc,KEVFIG,t,kBreath,kSit,0.6,false,(S.mode==='play')?'medi':'neutral',0,S.typing&&S.who==='k',false,kProp,1,S.scene==='studio');
   }
 
   if(showL){

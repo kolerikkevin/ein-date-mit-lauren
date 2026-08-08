@@ -1657,20 +1657,20 @@ function walkScene(){
     ],'Sie hat mitgezählt');
   }
   if(br==='skip'){
-    return beat('l','"Du hast an deine Mails gedacht." Pause. "Isch hab es gespürt. Dein Feld war im Büro."',[
-      {t:'"Nur an eine. Eine sehr laute Mail."',go:()=>{S.cringe++;rk('meh');walkSpaeti();}},
-      {t:'"Stimmt. Tut mir leid."',go:()=>{S.sym+=1;rk('ok');reply('l','"Beim nächsten Mal bleibst du. Falls es ein nächstes Mal gibt." Sie lässt den Satz absichtlich offen.',walkSpaeti);}}
+    return beat('l','"Du warst nicht wirklich im Moment."',[
+      {t:'"Ja, ich musste an meinen Physiklehrer denken."',go:()=>{S.cringe++;rk('meh');walkSpaeti();}},
+      {t:'"Krass, dass du das gespürt hast."',go:()=>{S.sym+=1;rk('ok');reply('l','"Beim nächsten Mal bleibst du im Moment. Falls es ein nächstes Mal gibt."',walkSpaeti);}}
     ],'Sie hat es gemerkt');
   }
   walkSpaeti();
 }
 function walkSpaeti(){
   S.scene='street';S.pose='stand';S.jonas=false;S.mode='talk';S.teary=true;
-  beat('l','Sie nickt Richtung Kiosk-Licht. "Isch brauche jetzt Zucker. Dein Riegel war Pappe — sag das nisch weiter. Spezi?"',[
-    {t:'"Spezi. Aber die richtige, nicht die mit Kirschgeschmack."',go:()=>{S.sym+=2;rk('good');S.bottle=true;walk2();}},
-    {t:'"Zwei. Ich zahl."',go:()=>{S.sym+=1;rk('ok');S.bottle=true;reply('l','"Oh. Ein Mann, der am Kiosk groß aufspielt." Sie meint es zur Hälfte spöttisch. Die andere Hälfte nimmt die Spezi.',walk2);}},
-    {t:'"Du hattest doch gerade erst den Riegel, den ich extra geholt hab."',go:()=>{S.sym+=2;rk('good');S.bottle=true;reply('l','"Das war vor dem Atmen. Isch bin jetzt ein anderer Mensch. Der Mensch will Spezi."',walk2);}},
-    {t:'"Ich trinke eigentlich keinen Zucker mehr." (Du trinkst Zucker.)',go:()=>{S.cringe++;rk('meh');S.bottle=true;reply('l','"Ehm. Du hältst gerade eine Spezi." — "Die ist für dich." — "Isch habe schon eine." Es entsteht eine Stille mit zwei Flaschen.',walk2);}}
+  beat('l','Sie nickt Richtung Kiosk-Licht. "Isch brauche jetzt Zucker. Spezi?"',[
+    {t:'"Spezi. Aber die richtige von Paulaner."',go:()=>{S.sym+=2;rk('good');S.bottle=true;walk2();}},
+    {t:'"Zwei. Ich zahl."',go:()=>{S.sym+=1;rk('ok');S.bottle=true;reply('l','"Oh. Ein Mann, der am Kiosk groß aufspielt."',walk2);}},
+    {t:'"Du hattest doch gerade erst den Riegel."',go:()=>{S.sym+=2;rk('good');S.bottle=true;reply('l','"Das war vor dem Atmen. Isch bin jetzt ein anderer Mensch und will Spezi."',walk2);}},
+    {t:'"Ich trinke nicht."',go:()=>{S.cringe++;rk('meh');S.bottle=true;reply('l','"Okay, ja kein Problem." (Doch ein Problem.)',walk2);}}
   ],'Nach dem Kurs, am Kiosk');
 }
 function walk2(){
@@ -1678,7 +1678,7 @@ function walk2(){
   const played=S.waves>0;                      // SIE weint immer — sie war wirklich drin; nur DEINE Bezüge hängen am Skip
   S.teary=true;
   const txt=played
-    ?'Ihr kommt aus dem Kiosk, jeder mit einer Flasche. Sie ist immer noch etwas verheult — beim Atmen hat es sie erwischt, irgendwo zwischen Welle zwei und drei. Sie tut nicht so, als wäre nichts.'
+    ?'Ihr kommt aus dem Kiosk,. Sie ist immer noch etwas verheult — beim Atmen hat es sie emotional erwischt.'
     :'Ihr kommt aus dem Kiosk, jeder mit einer Flasche. Sie ist etwas verheult — sie war wirklich da drin. Du warst die meiste Zeit im Büro, in deinem Kopf.';
   const os=[
     played?{t:'"Ich hab da drin an meinen Vater gedacht."',go:()=>{S.sym+=3;rk('good');reply('l','Sie bleibt kurz stehen und schaut auf ihre Flasche. "Isch auch. Nisch an deinen. An meinen." Pause. "Deshalb geh isch da hin. Man weint da für zwölf Euro fuffzig, das ist billiger als alles andere in dieser Stadt."',walk3);}}

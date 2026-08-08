@@ -80,7 +80,11 @@ const $ch=document.getElementById('choices'),$hint=document.getElementById('hint
       $sline=document.getElementById('sline'),$mute=document.getElementById('mute');
 const TOUCH=matchMedia('(pointer:coarse)').matches;
 /* Hochkant/Handy: Sprechtext als HTML-Band ÜBER der Szene — native Schärfe, Szene bleibt frei */
-const MOBILE_SAY=matchMedia('(max-width:700px)').matches;
+const MQ_SAY=matchMedia('(max-width:700px)');
+let MOBILE_SAY=MQ_SAY.matches;
+const syncSayMode=()=>{MOBILE_SAY=MQ_SAY.matches;};
+try{MQ_SAY.addEventListener('change',syncSayMode);}catch(e){if(MQ_SAY.addListener)MQ_SAY.addListener(syncSayMode);}
+addEventListener('resize',syncSayMode);
 const $say=document.getElementById('say');
 const BREATH_HINT=TOUCH
   ?'Finger aufs Bild gedrückt halten = einatmen · loslassen = ausatmen'
@@ -1470,13 +1474,13 @@ function drawDevice(t,pop){
   px(sc.x,sc.y,sc.w,sc.h,'#0b0f18');
   return sc;
 }
-function statusbar(sc,title,accent){
+function statusbar(sc,title,accent,clock,batt){
   px(sc.x,sc.y,sc.w,16,'#070a12');
-  txt('19:12',sc.x+6,sc.y+4,9,'#7a8aa4',true);
+  txt(clock||'19:12',sc.x+6,sc.y+4,9,'#7a8aa4',true);
   ctx.font='bold 9px ui-monospace,"Courier New",monospace';
   const tw=ctx.measureText(title).width;
   txt(title,sc.x+sc.w/2-tw/2,sc.y+4,9,accent||'#e8eaf0',true);
-  txt('68%',sc.x+sc.w-24,sc.y+4,9,'#7a8aa4',true);
+  txt((batt||68)+'%',sc.x+sc.w-24,sc.y+4,9,'#7a8aa4',true);
 }
 function portrait(cx,cy,r,P,t,face){
   ctx.save();ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.clip();
@@ -1491,7 +1495,7 @@ function introPop(){return Math.min(1,((performance.now()-(S.intro?S.intro.t0:0)
 
 function sceneProfile(t){
   const sc=drawDevice(t,introPop());
-  statusbar(sc,'hinge','#f0b8c8');
+  statusbar(sc,'hinge','#f0b8c8','19:12',72);
   const fx=sc.x+8,fy=sc.y+22,fw=sc.w-16,fh=104;
   px(fx-1,fy-1,fw+2,fh+2,'#1c2536');
   ctx.save();ctx.beginPath();ctx.rect(fx,fy,fw,fh);ctx.clip();
@@ -1520,7 +1524,7 @@ function sceneMatch(t){
   const sc=drawDevice(t,introPop());
   const el=(t-(S.intro?S.intro.t0:t))/1000;
   dgrad(sc.x,sc.y,sc.w,sc.h,['#3a1030','#6a1f48','#a83a63']);
-  statusbar(sc,'hinge','#ffd9e6');
+  statusbar(sc,'hinge','#ffd9e6','22:41',54);
   // Funken
   for(let i=0;i<26;i++){
     const a=(i*97)%360, rr=18+((i*53)%70)+Math.sin(el*2+i)*4;
@@ -1536,12 +1540,18 @@ function sceneMatch(t){
   ctx.fillStyle='#2a0c1e';ctx.fillText(s1,sc.x+sc.w/2-w1/2+2,sc.y+34+2);ctx.fillText(s2,sc.x+sc.w/2-w2/2+2,sc.y+58+2);
   ctx.fillStyle='#ffe066';ctx.fillText(s1,sc.x+sc.w/2-w1/2,sc.y+34);ctx.fillText(s2,sc.x+sc.w/2-w2/2,sc.y+58);
   const r=34+pop*4;
-  portrait(sc.x+sc.w/2-34,sc.y+124,r,LAUREN,t,0.6);
-  portrait(sc.x+sc.w/2+34,sc.y+124,r,KEVFIG,t,-0.6);
+  portrait(sc.x+sc.w/2-36,sc.y+120,r,LAUREN,t,0.6);
+  portrait(sc.x+sc.w/2+36,sc.y+120,r,KEVFIG,t,-0.6);
+  ctx.font='bold 9px ui-monospace,"Courier New",monospace';
+  ['Lauren','du'].forEach((lbl,i)=>{
+    const cxp=sc.x+sc.w/2+(i?34:-34), w=ctx.measureText(lbl).width;
+    px(Math.round(cxp-w/2-4),sc.y+160,Math.round(w+8),12,'rgba(20,6,16,0.6)');
+    txt(lbl,Math.round(cxp-w/2),sc.y+162,9,'#ffe9f2',true);
+  });
   ctx.font='bold 11px ui-monospace,"Courier New",monospace';
-  const s3='Du und Lauren mögt euch.';
+  const s3='Ihr mögt euch.';
   const w3=ctx.measureText(s3).width;
-  txt(s3,sc.x+sc.w/2-w3/2,sc.y+176,11,'#ffd9e6',true);
+  txt(s3,sc.x+sc.w/2-w3/2,sc.y+180,11,'#ffd9e6',true);
   // Button
   const bw=sc.w-40,bx=sc.x+20,by=sc.y+204;
   px(bx,by,bw,26,'#ffffff');px(bx+1,by+1,bw-2,24,'#f4f4f8');
@@ -1554,13 +1564,13 @@ function sceneMatch(t){
 
 function sceneChat(t){
   const sc=drawDevice(t,introPop());
-  statusbar(sc,'Lauren ✦','#f0b8c8');
+  statusbar(sc,'Lauren ✦','#f0b8c8',(S.intro&&S.intro.all)?'19:38':'19:12',(S.intro&&S.intro.all)?66:70);
   const MSG=[
-    ['k','Ich geh noch schnell zum Rewe — soll ich dir was mitbringen?'],
+    ['k','Geh grad zum Rewe. Soll ich dir was mitbringen?'],
     ['l','Koro Proteinbar. Schokolade, vegan.'],
-    ['l','Donnerstag Breathwork? Zwei Stunden atmen, bis man weint oder lacht.'],
-    ['k','Erstes Date. Klar.'],
-    ['l','19:50. Atem Raum. ✦'],
+    ['l','Donnerstag Breathwork? 2 Std atmen, bis man weint oder lacht.'],
+    ['k','Klar. Komme mit dem E-Bike.'],
+    ['l','19:50. Atem Raum ✦'],
   ];
   const el=(t-(S.intro?S.intro.t0:t))/1000;
   const all=S.intro&&S.intro.all;
@@ -1568,21 +1578,21 @@ function sceneChat(t){
   // Blasen vermessen
   const bubbles=[];let total=0;
   for(let i=0;i<shown;i++){
-    const lines=wrapT(MSG[i][1],22);
-    const h=lines.length*15+10;
+    const lines=wrapT(MSG[i][1],19);
+    const h=lines.length*14+9;
     bubbles.push({who:MSG[i][0],lines,h});total+=h+4;
   }
   const top=sc.y+18,viewH=sc.h-22;
   let y=top+Math.min(0,viewH-total);                       // neue Nachrichten schieben nach oben
   ctx.save();ctx.beginPath();ctx.rect(sc.x,top,sc.w,viewH);ctx.clip();
   for(const b of bubbles){
-    let wmax=0;for(const ln of b.lines)wmax=Math.max(wmax,ln.length*7.25);
-    const bw=Math.min(sc.w-24,wmax+14);
+    let wmax=0;for(const ln of b.lines)wmax=Math.max(wmax,ln.length*6.7);
+    const bw=Math.min(Math.round(sc.w*0.78),wmax+14);
     const mine=b.who==='k';
     const bx=mine?sc.x+sc.w-8-bw:sc.x+8;
     px(bx,y,bw,b.h,mine?'#1f4f8a':'#242b3a');
     px(bx,y,bw,1,mine?'#2f66ab':'#2e3648');
-    b.lines.forEach((ln,i)=>txt(ln,bx+8,y+6+i*15,12,mine?'#dceaff':'#e8eaf0'));
+    b.lines.forEach((ln,i)=>txt(ln,bx+7,y+5+i*14,11,mine?'#dceaff':'#e8eaf0'));
     y+=b.h+4;
   }
   if(shown<MSG.length){
@@ -1640,7 +1650,7 @@ function flushOpts(){
       audioInit();
       // Monkey-Island-Echo: gesprochene Antworten sagt Kevin erst selbst (blau, über ihm)
       if(S.mode==='talk'&&/^[»"]/.test(o.t)){
-        line('k',o.t.replace(/^[»"\s]+|["«\s]+$/g,''));
+        line('k',o.t.trim());
         opts([],'…');
         S.autoNext=o.go;
         return;
@@ -1664,8 +1674,9 @@ function line(who,txt){
   // bekommt sie Name + Farbe. Sobald erzählt wird oder mehrere sprechen → Erzähler.
   const quote=/^["»„]/.test(t);
   const swap=/["»“]\s*[—–-]\s*["»„]/.test(t);            // "…" — "…" = Dialogwechsel
-  const named=who!=='n'&&t.includes(NAME_OF[who]||' ');  // "sagt Lauren" = erzählt
-  const pure=who!=='n'&&quote&&!swap&&!named;
+  const outside=t.replace(/["»„][^"«“]*["«“]/g,' ');       // alles außerhalb der Zitate
+  const narrated=/\b(sagt|sagte|fragt|nickt|schaut|kramt|dreht|klopft|hebt|steigt|beißt|reißt|legt|zeigt|lacht|grinst)\b/i.test(outside);
+  const pure=who!=='n'&&quote&&!swap&&!narrated;
   const eff=pure?who:'n';
   S.who=eff;S.narr=(eff==='n');
   S.full=(pure?NAME_OF[who]+': ':'')+txt;
@@ -1673,7 +1684,7 @@ function line(who,txt){
   S.shown=0;S.typing=true;S.pause=0;
 }
 function beat(who,txt,list,hint){S.mood='neutral';S.moodT=0;line(who,txt);opts(list,hint);}
-function reply(who,txt,next){line(who,txt);opts([{t:'…',go:next}],'Weiter');}
+function reply(who,txt,next){line(who,txt);opts([{t:'(weiter)',go:next}],'Weiter');}
 function skipTyping(){
   if(S.typing){S.shown=S.full.length;S.typing=false;flushOpts();
     if(S.autoNext)S.autoT=performance.now()+260;
@@ -1684,27 +1695,27 @@ function skipTyping(){
 /* ================= AKT 1 — Smalltalk ================= */
 const RAW=[
  {sc:'front',who:'l',txt:'"Du bist Kevin, non? Der mit dem E-Bike aus dem Chat. Isch bin Lauren."',hint:'Vor dem Studio, ein Novemberabend, zehn vor acht',o:[
-   ['"Es ist ein E-Bike. Das E ist wichtig."',1,0,'l','"Warum?" — "Damit ich nicht verschwitzt ankomme." — "Mon dieu. Das ist so unsexy, dass es fast wieder geht."'],
+   ['"Es ist ein E-Bike. Das E ist wichtig."',1,0,'l','Sie: "Warum?" Du: "Damit ich nicht verschwitzt ankomme." Sie: "Mon dieu. Das ist so unsexy, dass es fast wieder geht."'],
    ['"Ja. Und du hattest das Gedicht im Profil."',2,0,'l','"Du hast es gelesen! Niemand liest die Prompts. Niemand. Warte — hatte isch eine Frage gestellt? Egal."'],
    ['"Nein."',1,1,'l','Sie schaut dich drei Sekunden an. "Doch. Isch spüre dein Feld. Es ist ein Kevin-Feld."'],
    ['Du schließt betont langsam das Rad ab.',0,2,'l','"Es steht vor einem Yogastudio. Hier klaut niemand. Hier atmet man nur."']
  ]},
  {sc:'front',who:'n',txt:'Drinnen läuft schon Musik. Keiner geht rein. Du kramst in der Jackentasche: der Riegel aus dem Chat. Koro, Schokolade, vegan.',hint:'Der Opener wird eingelöst',o:[
-   ['"Ich war noch schnell beim Rewe. Wie besprochen."',2,0,'l','"Den gibt es nisch beim Rewe." — "Ich weiß." Sie schaut den Riegel an wie ein Beweisstück. "Du hast einen Umweg gemacht. Für einen Riegel."'],
+   ['"Ich war noch schnell beim Rewe. Wie besprochen."',2,0,'l','Sie: "Den gibt es nisch beim Rewe." Du: "Ich weiß." Sie schaut den Riegel an wie ein Beweisstück. "Du hast einen Umweg gemacht. Für einen Riegel."'],
    ['"Du hast auf ‚Soll ich dir was mitbringen?‘ tatsächlich geantwortet."',2,0,'l','"Isch antworte immer. Die Leute fragen nur nie ernst." Sie reißt ihn sofort auf. "Du hast ernst gefragt."'],
    ['"Isst du den jetzt? Vor dem Atmen?"',1,0,'l','"Danach kann isch nisch essen, da bin isch zu weit weg." Sie beißt ab. "Willst du die Hälfte? Es ist ja deiner."'],
    ['"Der war im Angebot."',0,2,'l','"Der ist nie im Angebot." Lange Pause, in der sie ihn trotzdem auspackt. "Aber merci."']
  ],after:()=>{S.barGiven=true;}},
  {sc:'studio',who:'n',txt:'Drinnen. SCHUHE AUS steht an der Wand. Sie steckt den Riegelrest weg und ist schon raus aus ihren Schuhen. Deine Cap bleibt auf. Niemand sagt etwas. Alle denken es.',hint:'Die Socken-Frage',o:[
-   ['"Ich hab extra Socken ohne Löcher angezogen."',1,0,'l','"Extra für misch?" — "Für den Raum." — "Für den Raum. Bien sûr."'],
+   ['"Ich hab extra Socken ohne Löcher angezogen."',1,0,'l','Sie: "Extra für misch?" Du: "Für den Raum." Sie: "Für den Raum. Bien sûr."'],
    ['Ein Loch ist da. Sie sieht es.',1,1,'l','"Das ist ein Fenster", sagt sie. "Damit der Zeh was sieht." Pause. "Das war ein Vers, den nehm isch mit."'],
    ['"Ich bin barfuß eigentlich ein anderer Mensch."',2,0,'l','"Zeig mir den Menschen."'],
    ['"Riechst du das auch?"',0,3,'l','"Oui."']
  ]},
  {sc:'studio',who:'l',txt:'"Und was machst du? Nicht beruflich. Isch meine, was machst du wirklisch."',hint:'Die Frage, auf die alles ankommt',o:[
-   ['"Mein Nervensystem und ich reden gerade nicht miteinander."',2,0,'l','"Seit wann?" — "2019." — "Dann ist das hier eine Paartherapie. Isch bin die Therapeutin, der Raum ist der Anwalt."'],
+   ['"Mein Nervensystem und ich reden gerade nicht miteinander."',2,0,'l','Sie: "Seit wann?" Du: "2019." Sie: "Dann ist das hier eine Paartherapie. Isch bin die Therapeutin, der Raum ist der Anwalt."'],
    ['"Ich denke über Fernsehen nach, das es noch nicht gibt."',2,0,'l','"Oh! Das ist auch Dichtung. Nur mit Budget." Sie sagt Budget wie ein Schimpfwort.'],
-   ['"Ich hab gelesen, man kann dabei weinen. Ich wollte das mal testen."',1,1,'l','"Du machst Breathwork als Produkttest." — "Ich arbeite beim Fernsehen." — "Das erklärt viel."'],
+   ['"Ich hab gelesen, man kann dabei weinen. Ich wollte das mal testen."',1,1,'l','Sie: "Du machst Breathwork als Produkttest." Du: "Ich arbeite beim Fernsehen." Sie: "Das erklärt viel."'],
    ['"Portfolio Manager."',0,2,'l','"Ehm." Lange Pause. "Und das Wirklische?"']
  ]},
  {sc:'studio',who:'n',jon:1,txt:'Ein Mann mit Dutt, Stirnband und der Ruhe eines Möbelstücks kommt aus dem Hinterzimmer.',hint:'Der Kursleiter erscheint',o:[
@@ -1737,13 +1748,13 @@ function introProfile(){
 function introMatch(){
   S.mode='intro';S.scene='match';S.intro={t0:performance.now()};
   SFX.win();
-  line('n','Es hat gematcht.');
+  line('n','Sechs Tage vor dem Date, 22:41.');
   opts([{t:'Ihr schreiben.',go:introChat}],'Jetzt musst du was sagen');
 }
 function introChat(){
   S.mode='intro';S.scene='chat';S.intro={t0:performance.now(),all:false};
   line('n','Euer Chat.');
-  opts([{t:'Weiterlesen.',go:introReady}],'Deine erste Nachricht');
+  opts([{t:'Weiterlesen.',go:introReady}],'Wie alles anfing');
 }
 function introReady(){
   S.mode='intro';S.scene='chat';S.intro={t0:performance.now(),all:true};
@@ -1764,7 +1775,7 @@ function talkBeat(){
     feedback(o[1],o[2]);
     if(b.after){b.after();S.kbar=false;S.riegel=(b.sc==='front');}
     line(o[3],o[4]);
-    opts([{t:'…',go:()=>{ti++;SFX.page();talkBeat();}}],'Weiter');
+    opts([{t:'(weiter)',go:()=>{ti++;SFX.page();talkBeat();}}],'Weiter');
   }})),b.hint);
 }
 
@@ -1943,7 +1954,7 @@ function decision(){
 function noThanks(){
   SFX.endBad();react('scratch');
   line('l','"Okay." Pause. "Schade. Aber okay, passt."');
-  opts([{t:'…',go:()=>{
+  opts([{t:'(weiter)',go:()=>{
     line('n','Du sagst nichts mehr. Sie auch nicht. Ihr wartet zusammen auf ihre Tram, und das ist plötzlich sehr lang.');
     opts([{t:'Warten.',go:()=>startTram({yes:false,after:'"Mach\'s gut, Kevin." Sie steigt ein, ohne sich nochmal umzudrehen.',morning:'Am nächsten Morgen ist es einfach ein Donnerstag. Auch das ist eine Antwort.'})}],'Weiter');
   }}],'Weiter');
@@ -1954,29 +1965,29 @@ function revealStep(n){
   if(n===1){
     tone(523.25,0.9,'sine',0.06);
     line('n','Ich fänds cool, wenn wir uns wieder sehen. (♫ "Ich könnt mich dran gewöhn dich öfters zu sehen..." ♫)');
-    return opts([{t:'…',go:()=>revealStep(2)}],'Jetzt isses raus.');
+    return opts([{t:'(weiter)',go:()=>revealStep(2)}],'Jetzt isses raus.');
   }
   const score=S.sym-S.cringe*1.6+S.waves*1.4;
   if(score>=14){
     SFX.end();react('laugh');S.phoneHand=true;
     line('l','"Warte." Sie dreht dir ihr Handy hin. Du tippst deine Nummer ein.');
     opts([{t:'"Ja cool."',go:()=>{rk('good');line('l','"Samstag. Du bringst die Riegel — du weißt ja inzwischen, wo es sie nisch gibt. Isch bringe die Spezi. Und komm mit dem Rad."');
-      opts([{t:'…',go:()=>startTram({yes:true,msg:'Samstag? — habe es endlisch abgeschickt. Riegel: du. Spezi: isch. E-Bike: nisch vergessen. ✦',after:'Sie winkt durch die Scheibe, mit beiden Händen, wie ein Kind.',morning:'Ihre Nachricht liest du erst am Morgen.'})}],'Ihre Tram kommt');}}],'Sie hatte es schon getippt');
+      opts([{t:'(weiter)',go:()=>startTram({yes:true,msg:'Samstag? — habe es endlisch abgeschickt. Riegel: du. Spezi: isch. E-Bike: nisch vergessen. ✦',after:'Sie winkt durch die Scheibe, mit beiden Händen, wie ein Kind.',morning:'Ihre Nachricht liest du erst am Morgen.'})}],'Ihre Tram kommt');}}],'Sie hatte es schon getippt');
   }else if(score>=8){
     SFX.end();react('laugh');
     line('l','"Ja." Sie sagt es sofort, ohne die Pause, die du erwartet hast. "Aber diesmal ohne Jonas."');
     opts([{t:'"Ohne Jonas."',go:()=>{rk('good');line('l','"Bien. Isch schreib dir morgen. Wirklisch morgen, nicht Sonntag."');
-      opts([{t:'…',go:()=>startTram({yes:true,msg:'Guten Morgen. Ja, isch meinte es ernst. Ohne Jonas.',after:'Sie schaut dich durch die Scheibe an, bis die Tram um die Kurve ist.',morning:'Sie schreibt tatsächlich am nächsten Morgen. Um sieben. Du schläfst noch.'})}],'Ihre Tram kommt');}}],'Sie sagt ja');
+      opts([{t:'(weiter)',go:()=>startTram({yes:true,msg:'Guten Morgen. Ja, isch meinte es ernst. Ohne Jonas.',after:'Sie schaut dich durch die Scheibe an, bis die Tram um die Kurve ist.',morning:'Sie schreibt tatsächlich am nächsten Morgen. Um sieben. Du schläfst noch.'})}],'Ihre Tram kommt');}}],'Sie sagt ja');
   }else if(score>=4){
     SFX.ok();react('scratch');
     line('l','"Ehm." Sie überlegt wirklich, das sieht man. "Isch weiß es noch nisch. Aber isch weiß auch nisch Nein. Das ist besser als es klingt, glaub mir."');
     opts([{t:'"Das nehm ich."',go:()=>{rk('ok');line('l','"Gut. Dann lass isch disch das nehmen." Sie kramt in der Jacke und drückt dir den halben Riegel zurück in die Hand. "Anzahlung. Er war ja eh von dir."');
-      opts([{t:'…',go:()=>startTram({yes:true,msg:'Okay: Ja. Frag misch nisch, warum isch grinse.',card:'ZWEI MORGEN SPÄTER',after:'Sie hebt im Fenster kurz die Hand. Dann ist die Tram weg.',morning:'Zwei Tage lang nichts. Dann, am dritten Morgen, ohne Anlass: Sie kommt.'})}],'Ihre Tram kommt');}}],'Sie zögert ehrlich');
+      opts([{t:'(weiter)',go:()=>startTram({yes:true,msg:'Okay: Ja. Frag misch nisch, warum isch grinse.',card:'ZWEI MORGEN SPÄTER',after:'Sie hebt im Fenster kurz die Hand. Dann ist die Tram weg.',morning:'Zwei Tage lang nichts. Dann, am dritten Morgen, ohne Anlass: Sie kommt.'})}],'Ihre Tram kommt');}}],'Sie zögert ehrlich');
   }else{
     SFX.endBad();react('roll');
     line('l','"Kevin." Sie sagt deinen Namen so, wie man einen Satz beendet. "Du bist lieb. Aber isch will das nisch nochmal, glaub isch."');
     opts([{t:'"Okay."',go:()=>{line('l','"Okay." Sie nickt einmal. Dann, fast versöhnlich: "Den Vers mit dem Zeh und dem Fenster behalte isch trotzdem. Der kommt in ein Gedicht. Du wirst nisch erwähnt."');
-      opts([{t:'…',go:()=>startTram({yes:false,after:'Sie steigt ein. Durch die Scheibe schaut sie noch kurz auf ihr Handy, nicht zu dir. Es ist nicht böse gemeint. Es ist nur zu Ende.',morning:'Am nächsten Morgen denkst du kurz an sie, dann an Frühstück. In dieser Reihenfolge.'})}],'Ihre Tram kommt');}}],'Sie sagt es klar');
+      opts([{t:'(weiter)',go:()=>startTram({yes:false,after:'Sie steigt ein. Durch die Scheibe schaut sie noch kurz auf ihr Handy, nicht zu dir. Es ist nicht böse gemeint. Es ist nur zu Ende.',morning:'Am nächsten Morgen denkst du kurz an sie, dann an Frühstück. In dieser Reihenfolge.'})}],'Ihre Tram kommt');}}],'Sie sagt es klar');
   }
 }
 
@@ -2246,25 +2257,54 @@ function frame(t){
     ctx.fillStyle='#ffe066';ctx.fillText(lbl,21,252);
   }
 
-  // Titelkarte im DOTT-Kapitel-Stil
+  // Titel-Logo: gebogener Schriftzug mit Kontur, wie ein gemaltes Spiel-Logo
   if(S.mode==='title'){
-    if(MOBILE_SAY&&$say.textContent!=='Ein Date mit Lauren'){$say.textContent='Ein Date mit Lauren';$say.style.color='#ffe066';$say.className='';}
+    if(MOBILE_SAY){if($say.textContent!==''){$say.textContent='';$say.className='';}$say.style.display='none';}
     PS=1;
-    px(0,0,W,H,'rgba(8,4,22,0.22)');
-    px(0,24,W,92,'rgba(8,4,22,0.74)');
-    px(0,24,W,2,'#ffe066');px(0,114,W,2,'#ffe066');
-    ctx.textBaseline='top';ctx.textAlign='center';
-    ctx.font='bold 29px ui-monospace,"Courier New",monospace';
-    ctx.fillStyle='#000';ctx.fillText('EIN DATE MIT LAUREN',W/2+2,50+2);
-    ctx.fillStyle='#ffe066';ctx.fillText('EIN DATE MIT LAUREN',W/2,50);
-    ctx.font='bold 14px ui-monospace,"Courier New",monospace';
-    ctx.fillStyle='#8fe6d2';ctx.fillText('Teil Eins: Der Atem-Raum',W/2,90);
+    px(0,0,W,H,'rgba(6,4,18,0.58)');
+    const arc=(str,cy,size,r0)=>{                       // Buchstaben einzeln auf einem flachen Bogen
+      ctx.font='bold '+size+'px ui-monospace,"Courier New",monospace';
+      ctx.textBaseline='middle';ctx.textAlign='center';
+      const ws=[];let total=0;
+      for(const ch of str){const w=ctx.measureText(ch).width*1.08;ws.push(w);total+=w;}
+      let x=W/2-total/2;
+      for(let i=0;i<str.length;i++){
+        const ch=str[i], w=ws[i], p=(i/(str.length-1||1))-0.5;
+        const yy=cy+p*p*r0*4 - r0;                       // leichter Bogen nach oben
+        ctx.save();ctx.translate(x+w/2,yy);ctx.rotate(p*0.07);
+        ctx.lineJoin='round';
+        ctx.strokeStyle='#1a0f2e';ctx.lineWidth=size*0.20;ctx.strokeText(ch,0,0);
+        ctx.strokeStyle='#000';ctx.lineWidth=size*0.07;ctx.strokeText(ch,0,0);
+        const g=ctx.createLinearGradient(0,-size*0.6,0,size*0.6);
+        g.addColorStop(0,'#fff3c0');g.addColorStop(0.42,'#ffd257');g.addColorStop(1,'#e08a2c');
+        ctx.fillStyle=g;ctx.fillText(ch,0,0);
+        ctx.fillStyle='rgba(255,255,255,0.55)';ctx.fillText(ch,0,-size*0.06);
+        ctx.globalCompositeOperation='source-over';
+        ctx.restore();
+        x+=w;
+      }
+    };
+    // Zierband hinter dem Logo
+    px(0,34,W,3,'rgba(255,214,120,0.30)');px(0,150,W,3,'rgba(255,214,120,0.30)');
+    ctx.textAlign='center';ctx.textBaseline='top';
+    ctx.font='bold 15px ui-monospace,"Courier New",monospace';
+    ctx.fillStyle='#0d0a20';ctx.fillText('E I N   D A T E   M I T',W/2+1,47);
+    ctx.fillStyle='#8fe6d2';ctx.fillText('E I N   D A T E   M I T',W/2,46);
+    arc('LAUREN',108,52,4);
+    // Rankenpunkte links/rechts vom Untertitel
+    ctx.font='bold 11px ui-monospace,"Courier New",monospace';
+    px(W/2-132,126,264,22,'rgba(8,5,20,0.9)');
+    ctx.fillStyle='#0d0a20';ctx.fillText('Ein Abend im Atem-Raum',W/2+1,133);
+    ctx.fillStyle='#ffe9b8';ctx.fillText('Ein Abend im Atem-Raum',W/2,132);
+    px(W/2-118,138,74,2,'rgba(255,233,184,0.5)');px(W/2+44,138,74,2,'rgba(255,233,184,0.5)');
     if(Math.sin(t/380)>0){
       ctx.font='bold 11px ui-monospace,"Courier New",monospace';
-      ctx.fillStyle='#c8c8e0';ctx.fillText('— '+(TOUCH?'Tipp':'Klick')+', um anzufangen —',W/2,268);
+      ctx.fillStyle='#000';ctx.fillText('— '+(TOUCH?'Tipp':'Klick')+', um anzufangen —',W/2+1,271);
+      ctx.fillStyle='#e8e2f4';ctx.fillText('— '+(TOUCH?'Tipp':'Klick')+', um anzufangen —',W/2,270);
     }
     ctx.textAlign='left';
   }else if(MOBILE_SAY){
+    if($say.style.display==='none')$say.style.display='';
     // Handy: Text nativ scharf im HTML-Band über der Szene
     const txt=S.full.slice(0,Math.floor(S.shown));
     if($say.textContent!==txt)$say.textContent=txt;

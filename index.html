@@ -1,0 +1,1958 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Breathwork mit Lauren — ein Date</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕯️</text></svg>">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:#000;color:#e8e8f0;
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,"Courier New",monospace;
+    display:flex;align-items:center;justify-content:center;padding:14px;
+    -webkit-font-smoothing:none;
+  }
+  #frame{width:100%;max-width:960px}
+  canvas{
+    display:block;width:100%;height:auto;
+    image-rendering:pixelated;image-rendering:crisp-edges;
+    background:#000;border:2px solid #16162a;cursor:pointer;
+    touch-action:none;user-select:none;
+  }
+  #ui{background:#07070f;border:2px solid #16162a;border-top:none;padding:9px 12px 11px;min-height:132px}
+  #hint{color:#7a7aa8;font-size:11px;letter-spacing:.6px;margin-bottom:7px;text-transform:uppercase}
+  ul{list-style:none}
+  li{padding:3px 6px 3px 18px;position:relative;cursor:pointer;font-size:14px;line-height:1.45;color:#cfc2e8}
+  li:before{content:"›";position:absolute;left:4px;color:#3a3a6a}
+  li:hover{color:#ffe066}
+  li:hover:before{color:#ffe066}
+  #stats{display:flex;gap:20px;align-items:center;margin-top:9px;padding-top:8px;
+         border-top:1px solid #16162a;font-size:11px;color:#7a7aa8;letter-spacing:.5px}
+  #stats b{color:#e8e8f0;font-weight:normal}
+  #mute{margin-left:auto;background:none;border:1px solid #26264a;color:#7a7aa8;
+        font:inherit;font-size:11px;padding:2px 8px;cursor:pointer;letter-spacing:.5px}
+  #mute:hover{color:#ffe066;border-color:#5a5a2a}
+  li{-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  @media (max-width:700px){
+    body{padding:0;align-items:flex-start}
+    #frame{max-width:none}
+    canvas{border-left:none;border-right:none}
+    #ui{padding:8px 10px 10px;min-height:0;border-left:none;border-right:none}
+    #hint{font-size:10px;margin-bottom:5px}
+    li{font-size:15px;line-height:1.4;padding:9px 6px 9px 20px}
+    li:before{top:9px}
+    li{position:relative}
+    #stats{font-size:10px;margin-top:6px;padding-top:6px}
+  }
+</style>
+</head>
+<body>
+<div id="frame">
+  <canvas id="c" width="480" height="300"></canvas>
+  <div id="ui">
+    <div id="hint">…</div>
+    <ul id="choices"></ul>
+    <div id="stats"><span id="sline"></span><button id="mute" type="button">♪ AN</button></div>
+  </div>
+</div>
+<script>
+(() => {
+"use strict";
+
+const W=480,H=300;
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+ctx.imageSmoothingEnabled=false;
+const $ch=document.getElementById('choices'),$hint=document.getElementById('hint'),
+      $sline=document.getElementById('sline'),$mute=document.getElementById('mute');
+const TOUCH=matchMedia('(pointer:coarse)').matches;
+const BREATH_HINT=TOUCH
+  ?'Finger aufs Bild gedrückt halten = einatmen · loslassen = ausatmen'
+  :BREATH_HINT;
+cv.addEventListener('contextmenu',e=>e.preventDefault());   // kein Long-Press-Menü beim Atmen
+
+/* Alles zeichnet in Einheiten; PS skaliert sie auf echte Pixel (immer ganzzahlig). */
+let PS=1;
+const px=(x,y,w,h,c)=>{ctx.fillStyle=c;
+  ctx.fillRect(Math.round(x*PS),Math.round(y*PS),Math.max(0,Math.round(w*PS)),Math.max(0,Math.round(h*PS)));};
+const dot=(x,y,c)=>px(x,y,1,1,c);
+const vgrad=(x,y,w,h,cols)=>{const s=h/cols.length;for(let i=0;i<cols.length;i++)px(x,y+i*s,w,Math.ceil(s)+1,cols[i]);};
+/* Verlauf mit Dither-Naht (Schachbrett) statt harter Bänder — 90er-VGA-Look */
+const dgrad=(x,y,w,h,cols)=>{
+  const s=h/cols.length;
+  for(let i=0;i<cols.length;i++){
+    px(x,y+i*s,w,Math.ceil(s)+1,cols[i]);
+    if(i){
+      const yy=Math.round(y+i*s);
+      for(let xx=x;xx<x+w;xx+=2){
+        px(xx+(yy%2),yy-1,1,1,cols[i]);
+        px(xx+((yy+1)%2),yy+1,1,1,cols[i-1]);
+      }
+    }
+  }
+};
+/* Polygon in Einheiten — für die schiefen DOTT-Wände und Fluchtpunkt-Böden */
+const poly=(pts,c)=>{ctx.fillStyle=c;ctx.beginPath();
+  pts.forEach((p,i)=>{i?ctx.lineTo(p[0]*PS,p[1]*PS):ctx.moveTo(p[0]*PS,p[1]*PS);});
+  ctx.closePath();ctx.fill();};
+
+/* ================= Sound ================= */
+const SND={ac:null,master:null,on:true,breath:null,pad:null};
+function audioInit(){
+  if(SND.ac)return;
+  const AC=window.AudioContext||window.webkitAudioContext; if(!AC)return;
+  const ac=new AC(); const m=ac.createGain(); m.gain.value=0.16; m.connect(ac.destination);
+  SND.ac=ac;SND.master=m;
+}
+function ready(){ if(!SND.on)return false; if(!SND.ac)audioInit();
+  if(SND.ac&&SND.ac.state==='suspended')SND.ac.resume(); return !!SND.ac; }
+
+function tone(freq,dur,type,vol,delay,glideTo){
+  if(!ready())return;
+  const ac=SND.ac,t0=ac.currentTime+(delay||0);
+  const o=ac.createOscillator(),g=ac.createGain(),f=ac.createBiquadFilter();
+  o.type=type||'sine';o.frequency.setValueAtTime(freq,t0);
+  if(glideTo)o.frequency.exponentialRampToValueAtTime(glideTo,t0+dur);
+  f.type='lowpass';f.frequency.value=2600;f.Q.value=0.6;
+  g.gain.setValueAtTime(0.0001,t0);
+  g.gain.exponentialRampToValueAtTime(vol||0.1,t0+0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+  o.connect(f);f.connect(g);g.connect(SND.master);
+  o.start(t0);o.stop(t0+dur+0.05);
+}
+const SFX={
+  good(){tone(587.33,0.42,'sine',0.11);tone(880,0.55,'sine',0.085,0.09);tone(1174.66,0.5,'sine',0.032,0.17);},
+  ok(){tone(440,0.34,'sine',0.09);tone(659.25,0.32,'sine',0.04,0.06);},
+  meh(){tone(311.13,0.30,'triangle',0.085);tone(293.66,0.34,'triangle',0.05,0.05);},
+  bad(){tone(196,0.55,'sawtooth',0.05,0,138.59);tone(103,0.6,'sine',0.085);},
+  page(){tone(1046.5,0.08,'sine',0.03);},
+  blip(){tone(1380,0.022,'square',0.014);},
+  start(){tone(174.61,1.6,'sine',0.055);tone(261.63,1.4,'sine',0.028,0.1);},
+  win(){tone(659.25,0.5,'sine',0.10);tone(987.77,0.7,'sine',0.07,0.11);tone(1318.5,0.8,'sine',0.03,0.22);},
+  lose(){tone(110,0.8,'sine',0.10,0,73);tone(146,0.5,'triangle',0.04);},
+  end(){tone(392,0.7,'sine',0.09);tone(587.33,0.9,'sine',0.07,0.16);tone(783.99,1.4,'sine',0.05,0.34);},
+  endBad(){tone(146.83,1.6,'sine',0.10,0,110);}
+};
+function breathStart(){
+  if(!ready()||SND.breath)return;
+  const ac=SND.ac;
+  const buf=ac.createBuffer(1,ac.sampleRate*2,ac.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*0.5;
+  const src=ac.createBufferSource();src.buffer=buf;src.loop=true;
+  const bp=ac.createBiquadFilter();bp.type='bandpass';bp.frequency.value=420;bp.Q.value=1.1;
+  const g=ac.createGain();g.gain.value=0.0001;
+  src.connect(bp);bp.connect(g);g.connect(SND.master);src.start();
+  const o1=ac.createOscillator(),o2=ac.createOscillator(),pg=ac.createGain();
+  o1.type='sine';o1.frequency.value=146.83;o2.type='sine';o2.frequency.value=220.5;
+  pg.gain.value=0.0001;o1.connect(pg);o2.connect(pg);pg.connect(SND.master);o1.start();o2.start();
+  SND.breath={src,bp,g};SND.pad={o1,o2,pg};
+}
+function breathStop(){
+  if(!SND.breath||!SND.ac)return;
+  const t=SND.ac.currentTime;
+  SND.breath.g.gain.cancelScheduledValues(t);
+  SND.breath.g.gain.setTargetAtTime(0.0001,t,0.15);
+  SND.pad.pg.gain.setTargetAtTime(0.0001,t,0.2);
+  const b=SND.breath,p=SND.pad;SND.breath=null;SND.pad=null;
+  setTimeout(()=>{try{b.src.stop();p.o1.stop();p.o2.stop();}catch(e){}},800);
+}
+function breathUpdate(v,hold,inband){
+  if(!SND.breath||!SND.ac)return;
+  const t=SND.ac.currentTime;
+  SND.breath.bp.frequency.setTargetAtTime(300+v*1500,t,0.08);
+  SND.breath.g.gain.setTargetAtTime(hold?0.085:0.045,t,0.12);
+  SND.pad.pg.gain.setTargetAtTime(inband?0.05:0.004,t,0.25);
+}
+$mute.onclick=()=>{
+  SND.on=!SND.on;$mute.textContent=SND.on?'♪ AN':'♪ AUS';
+  if(!SND.on){breathStop();if(SND.master)SND.master.gain.value=0;}
+  else{audioInit();if(SND.master)SND.master.gain.value=0.16;}
+};
+
+/* ================= Sternenfeld ================= */
+const stars=[];(()=>{let s=8123;const r=()=>(s=(s*1103515245+12345)&0x7fffffff)/0x7fffffff;
+  for(let i=0;i<90;i++)stars.push({x:(r()*320)|0,y:(r()*110)|0,b:r()});})();
+function moon(x,y,r){
+  // Echte Sichel mit Glow statt weißem Klotz
+  ctx.save();ctx.translate(x*PS,y*PS);ctx.scale(PS,PS);
+  ctx.fillStyle='rgba(255,250,215,0.06)';
+  ctx.beginPath();ctx.arc(0,0,r*1.55,0,7);ctx.fill();
+  ctx.fillStyle='#efe9cc';
+  ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.fill();
+  ctx.fillStyle='rgba(12,10,44,0.92)';
+  ctx.beginPath();ctx.arc(r*0.5,-r*0.25,r*0.92,0,7);ctx.fill();
+  ctx.restore();
+}
+
+/* ================= Figuren, fein ================= */
+/* Raster 44 x 68 Einheiten. s = Pixel pro Einheit. */
+const LAUREN={
+  skin:'#f7d7b8',skinSh:'#e2b995',skinDk:'#c99a78',blush:'#eaa896',
+  hair:'#e5ca80',hairHi:'#f9e9b4',hairMid:'#cdaf66',hairDk:'#a78a49',
+  top:'#c96a86',topHi:'#e28ea6',topDk:'#9d4a64',
+  white:'#f6f2ec',iris:'#4e8a86',pupil:'#1a1620',lash:'#3a2a24',
+  lip:'#c46f7d',lipHi:'#dd949c',pants:'#33334a',beard:null,
+  jacket:'#3f8f86',jacketDk:'#2c6e63',sockCol:'#3a3a52'
+};
+/* Kevin — nach Referenzbild: Cap, orange Brille, blaues Hemd offen, Chinos, weiße Sneaker */
+const KEVFIG={
+  skin:'#e8c09a',skinSh:'#d0a67e',skinDk:'#b78a60',blush:'#d8a084',
+  hair:'#e2c268',hairHi:'#f2dc94',hairMid:'#c4a24e',hairDk:'#a08038',
+  top:'#3f6aa8',topHi:'#5c88c4',topDk:'#2e5288',
+  white:'#f2eee6',iris:'#4e7ab0',pupil:'#1a1620',lash:'#3a2a20',
+  lip:'#a86a58',lipHi:'#c08a76',pants:'#d8cbaa',pantsHi:'#e8dcc0',
+  cap:'#16161e',stubble:1,tee:'#eae4d8',sneaker:'#ececec',straight:1,sockCol:'#7fa8d0'
+};
+const JONAS={
+  skin:'#ecc3a4',skinSh:'#d4a888',skinDk:'#b98d6c',blush:'#d59a86',
+  hair:'#b59464',hairHi:'#cdb083',hairMid:'#9c7c4e',hairDk:'#7d6238',
+  top:'#cbb78d',topHi:'#e3d2ac',topDk:'#a5926c',
+  white:'#f2eee6',iris:'#6a7a5a',pupil:'#1a1620',lash:'#4a3a28',
+  lip:'#b98a7a',lipHi:'#cba392',pants:'#8a7a5a',beard:'#8d7048',
+  bun:1,stout:1,band:'#c8703c',sockCol:'#b8a888'  // eigenes Rig: Dutt, Stirnband, Bauch statt Taille
+};
+
+function figure(cx,top,s,P,t,breath,sitting,phase,blinkOff,mood,age){
+  PS=1;
+  const R=(x,y,w,h,c)=>px(cx+x*s,top+y*s,w*s,h*s,c);
+  const e=breath>0.58?1:0;                                  // Brust hebt sich
+  const sway=Math.sin(t/1600+phase)>0?0:1;                  // sachtes Wiegen
+  const cyc=(t+phase*1000)%4200;
+  const mo=mood||'neutral';
+  const a=age||0;
+  const laughing=(mo==='laugh'&&a<3.4);
+  const rolling=(mo==='roll'&&a<1.1);
+  const scratching=(mo==='scratch'&&a<3.4);
+  const blink=laughing?true:(!blinkOff&&(cyc<130||(cyc>1700&&cyc<1810)));
+  // beim Lachen wippt der ganze Körper, der Kopf geht nach hinten
+  const yb=sway+(laughing?(Math.sin(t/95)>0?0:1):0);
+  const hb=laughing?-1:0;                                   // Kopf zurück
+
+  /* ---- Körper ---- */
+  const O='#160f26';                                        // Kontur wie im Vorbild
+  if(sitting){
+    R(0,52,44,14,O);
+    R(3,55,38,9,P.pants); R(5,58,34,5,'#2a2a3e');
+    R(1,60,42,5,P.pants); R(1,63,42,2,'#252537');
+    R(4,52,8,5,P.skin); R(32,52,8,5,P.skin);                // Hände auf Knien
+    R(4,52,8,1,'#ffe3c4'); R(32,52,8,1,'#ffe3c4');
+    R(6,55,1,2,P.skinDk); R(8,55,1,2,P.skinDk);
+    R(34,55,1,2,P.skinDk); R(36,55,1,2,P.skinDk);
+  }else{
+    // Stand-/Spielbein: rechtes Bein leicht versetzt = Pose statt Symmetrie
+    R(12,54,10,15,O); R(21,55,10,15,O);
+    R(14,55,7,13,P.pants); R(23,56,7,12,P.pants);
+    R(14,55,7,1,'#454560'); R(23,56,7,1,'#454560');
+    R(13,66,9,2,'#191922'); R(22,67,9,2,'#191922');
+  }
+  // Torso — Schulter breit, Taille schmal, Hüfte mittel (DOTT-Silhouette)
+  R(8-e,32+yb-e,28+e*2,25,O);
+  R(9-e,33+yb-e,26+e*2,8,P.top);                             // Schultern
+  R(12-e,41+yb-e,20+e*2,8,P.top);                            // Taille
+  R(10-e,49+yb-e,24+e*2,7,P.top);                            // Hüfte
+  R(9-e,33+yb-e,26+e*2,2,P.topHi);
+  R(10-e,53,24+e*2,2,P.topDk);
+  R(13,36+yb-e,3,14,P.topHi);                                // Faltenlicht
+  R(28,38+yb-e,3,11,P.topDk);
+  // Arme — dunkler als Torso + Konturspalte dazwischen
+  R(4,35+yb-e,7,19,O); R(33,35+yb-e,7,19,O);
+  R(5,36+yb-e,5,17,P.topDk); R(34,36+yb-e,5,17,P.topDk);
+  R(5,36+yb-e,5,1,P.top); R(34,36+yb-e,5,1,P.top);
+  R(10,35+yb-e,1,18,O); R(33,35+yb-e,1,18,O);
+  if(!sitting){ R(4,52,7,6,P.skin); R(33,52,7,6,P.skin);     // große DOTT-Hände
+    R(4,52,7,1,'#ffe3c4'); R(33,52,7,1,'#ffe3c4');
+    R(6,55,1,3,P.skinDk); R(8,55,1,3,P.skinDk);
+    R(35,55,1,3,P.skinDk); R(37,55,1,3,P.skinDk); }
+  // Hals
+  R(18,28+yb,8,6,P.skinSh); R(19,28+yb,6,5,P.skin); R(18,33+yb,8,1,P.skinDk);
+
+  const yh=yb+hb;                                            // Kopfhöhe
+
+  /* ---- Haar hinten ---- */
+  R(9,2+yh,26,36,O);
+  R(11,4+yh,22,32,P.hairDk);
+  R(11,4+yh,22,2,P.hairMid);
+  R(10,10+yh,3,24,P.hairDk); R(31,10+yh,3,24,P.hairDk);
+
+  /* ---- Kopf ---- */
+  R(14,6+yh,16,20,P.skin);
+  R(15,4+yh,14,3,P.skin);
+  R(15,26+yh,14,2,P.skin);                                   // Kiefer
+  R(17,28+yh,10,2,P.skin);                                   // Kinn
+  R(17,29+yh,10,1,P.skinSh);
+  R(14,6+yh,16,2,'#ffe6cc');                                 // Stirnlicht
+  R(28,8+yh,2,18,P.skinSh);                                  // Schattenseite
+  R(14,8+yh,1,16,P.skinSh);
+  // Ohren
+  R(12,15+yh,2,6,P.skin); R(30,15+yh,2,6,P.skin);
+  R(12,17+yh,1,3,P.skinDk); R(31,17+yh,1,3,P.skinDk);
+
+  /* ---- Haar vorne ---- */
+  R(13,3+yh,18,5,P.hair);
+  R(15,3+yh,11,2,P.hairHi);
+  R(13,7+yh,4,4,P.hair); R(27,7+yh,4,4,P.hair);
+  R(12,5+yh,3,26,P.hair); R(29,5+yh,3,26,P.hair);
+  R(12,5+yh,1,24,P.hairMid); R(31,5+yh,1,24,P.hairMid);
+  R(17,4+yh,1,4,P.hairMid); R(23,3+yh,1,4,P.hairMid);        // Strähnen
+  R(13,20+yh,2,10,P.hairMid); R(29,22+yh,2,8,P.hairMid);
+
+  /* ---- Gesicht ---- */
+  // Brauen
+  let bl0=12,br0=12;
+  if(laughing){bl0=10;br0=10;}
+  else if(rolling||mo==='roll'){bl0=10;br0=10;}
+  else if(scratching){bl0=10;br0=13;}                        // eine hoch, eine runter
+  R(16,bl0+yh,5,1,P.hairDk); R(23,br0+yh,5,1,P.hairDk);
+  R(16,bl0+yh,2,1,P.hairMid); R(26,br0+yh,2,1,P.hairMid);
+
+  // Augen
+  if(laughing){                                              // Lachfältchen, Augen zu
+    R(16,15+yh,5,1,P.lash); R(23,15+yh,5,1,P.lash);
+    R(16,14+yh,1,1,P.lash); R(20,14+yh,1,1,P.lash);
+    R(23,14+yh,1,1,P.lash); R(27,14+yh,1,1,P.lash);
+    R(15,17+yh,2,1,P.skinDk); R(28,17+yh,2,1,P.skinDk);
+  }else if(blink){
+    R(16,16+yh,5,1,P.lash); R(23,16+yh,5,1,P.lash);
+  }else{
+    // Blickrichtung: Augenrollen fährt einmal oben herum
+    let ox=0,oy=0;
+    if(rolling){
+      const p=a/1.1;
+      ox=p<0.33?-1:p<0.66?0:1; oy=-1;
+    }else if(mo==='roll'){ oy=0; }
+    else if(scratching){ ox=1; oy=0; }
+    R(16,14+yh,5,4,P.white); R(23,14+yh,5,4,P.white);
+    R(17,14+yh,3,4,P.iris);  R(24,14+yh,3,4,P.iris);
+    R(18+ox,15+yh+oy,2,3+(oy?-1:0),P.pupil); R(25+ox,15+yh+oy,2,3+(oy?-1:0),P.pupil);
+    if(!oy){R(17,15+yh,1,1,'#ffffff'); R(24,15+yh,1,1,'#ffffff');}
+    R(16,13+yh,5,1,P.lash);  R(23,13+yh,5,1,P.lash);
+    R(16,18+yh,5,1,P.skinSh); R(23,18+yh,5,1,P.skinSh);
+  }
+  // Nase
+  R(21,17+yh,2,4,P.skinSh); R(21,21+yh,3,1,P.skinDk);
+  R(20,21+yh,1,1,P.skinDk); R(23,21+yh,1,1,P.skinDk);
+  // Mund
+  if(laughing){                                              // offener Lachmund
+    R(18,23+yh,8,5,'#5a2630');
+    R(19,23+yh,6,1,'#f6f2ec');                               // Zähne
+    R(20,26+yh,4,1,'#c4606a');                               // Zunge
+    R(17,23+yh,1,1,P.lip); R(26,23+yh,1,1,P.lip);
+  }else if(mo==='roll'){
+    R(19,24+yh,7,1,P.lip); R(19,25+yh,1,1,P.lip);            // schmal, links runter
+  }else if(mo==='scratch'){
+    R(19,24+yh,6,1,P.lip); R(20,25+yh,4,1,P.lipHi); R(25,24+yh,1,1,P.skinDk);
+  }else{
+    R(18,24+yh,8,1,P.lip); R(19,25+yh,6,1,P.lipHi); R(20,23+yh,4,1,P.skinSh);
+  }
+  // Wangen
+  R(15,20+yh,3,2,P.blush); R(26,20+yh,3,2,P.blush);
+  if(laughing){ R(15,19+yh,4,3,P.blush); R(25,19+yh,4,3,P.blush); }
+  // Bart (Jonas)
+  if(P.beard){
+    R(15,25+yh,14,4,P.beard); R(17,29+yh,10,2,P.beard);
+    R(18,24+yh,8,1,P.lip); R(19,25+yh,6,1,P.lipHi);
+    R(15,25+yh,14,1,P.hairMid);
+  }
+
+  /* ---- Am Kopf kratzen ---- */
+  if(scratching){
+    const j=Math.sin(t/110)>0?0:1;
+    R(34,36+yb-e,5,8,P.top);                                 // Oberarm
+    R(32,26+yh-j,5,13,P.top);                                // Unterarm hoch
+    R(32,26+yh-j,5,1,P.topHi);
+    R(29,20+yh-j,7,7,P.skin);                                // Hand am Hinterkopf
+    R(29,20+yh-j,7,1,'#ffe3c4');
+    R(30,24+yh-j,1,3,P.skinDk); R(32,24+yh-j,1,3,P.skinDk); R(34,24+yh-j,1,3,P.skinDk);
+  }
+  PS=1;
+}
+
+/* ================= Figuren V2 — echte DOTT-Proportionen =================
+   Riesenkopf (~1/3 Körper), dünner Hals, Wespentaille, Riesenhände/-füße,
+   asymmetrische Pose (Hand in der Hüfte, Standbein/Spielbein).
+   Überschreibt die alte figure()-Deklaration. Raster 48 x 92 (stehend) / 48 x 66 (sitzend). */
+function figure(cx,top,s,P,t,breath,sitting,phase,blinkOff,mood,age,talking,walking){
+  PS=1;
+  const R=(x,y,w,h,c)=>px(cx+x*s,top+y*s,w*s,h*s,c);
+  const O='#12091e';
+  const e=breath>0.58?1:0;
+  const sway=Math.sin(t/1600+phase)>0?0:1;
+  const cyc=(t+phase*1000)%4200;
+  const mo=mood||'neutral';
+  const a=age||0;
+  const laughing=(mo==='laugh'&&a<3.4);
+  const rolling=(mo==='roll'&&a<1.1);
+  const scratching=(mo==='scratch'&&a<3.4);
+  const blink=laughing?true:(!blinkOff&&(cyc<130||(cyc>1700&&cyc<1810)));
+  const yb=sway+(laughing?(Math.sin(t/95)>0?0:1):0);
+  const yh=yb+(laughing?-2:0);
+  const ty=sitting?30:33;                    // Torso-Oberkante
+
+  if(sitting){
+    /* Schneidersitz */
+    R(2,54+yb,44,13,O);
+    R(4,56+yb,40,7,P.pants); R(2,61+yb,44,4,P.pants); R(2,64+yb,44,2,'#20202f');
+    R(4,50+yb,10,8,O); R(34,50+yb,10,8,O);                    // Riesenhände auf Knien
+    R(5,51+yb,8,6,P.skin); R(35,51+yb,8,6,P.skin);
+    R(5,51+yb,8,1,'#ffe3c4'); R(35,51+yb,8,1,'#ffe3c4');
+    R(7,54+yb,1,3,P.skinDk); R(10,54+yb,1,3,P.skinDk);
+    R(37,54+yb,1,3,P.skinDk); R(40,54+yb,1,3,P.skinDk);
+    /* Torso mit Taille */
+    R(13,29+yb-e,22,26+e,O);
+    R(14,30+yb-e,20,9+e,P.top);
+    R(17,38+yb,14,8,P.top);
+    R(15,45+yb,18,9,P.top);
+    R(14,30+yb-e,20,2,P.topHi);
+    R(16,33+yb,3,16,P.topHi); R(29,34+yb,3,14,P.topDk);
+    /* Arme zu den Knien */
+    R(9,32+yb-e,6,19,O); R(10,33+yb-e,4,17,P.topDk);
+    R(33,32+yb-e,6,19,O); R(34,33+yb-e,4,17,P.topDk);
+  }else{
+    /* Beine — lang, dünn; beim Gehen wechselnder Schritt */
+    const wk=walking?(Math.sin(t/130)>0?2:0):0;
+    const wk2=walking?(2-wk):0;
+    R(16,58,9,28,O); R(25,59,9,28,O);
+    R(17,59-wk,7,26,P.pants); R(26,60-wk2,7,26,P.pants);
+    R(17,59-wk,2,26,'#4a4a68'); R(26,60-wk2,2,26,'#4a4a68');
+    /* Riesenschuhe */
+    R(10-wk,84-wk,15,7,O); R(25+wk2,86-wk2,15,7,O);
+    R(11-wk,85-wk,13,5,'#1c1c28'); R(26+wk2,87-wk2,13,5,'#1c1c28');
+    R(11-wk,85-wk,13,1,'#3c3c52'); R(26+wk2,87-wk2,13,1,'#3c3c52');
+    if(P.stout){
+      /* Jonas: Fass-Torso mit Bauch statt Taille */
+      R(11,32-e+yb,26,29+e,O);
+      R(12,33-e+yb,24,27+e,P.top);
+      R(12,33-e+yb,24,2,P.topHi);
+      R(10,44,28,13,O); R(11,45,26,11,P.top);
+      R(11,53,26,2,P.topDk);
+      R(14,36+yb,3,16,P.topHi); R(31,38+yb,3,14,P.topDk);
+    }else{
+      /* Hüfte + A-Linie */
+      R(13,51,22,10,O);
+      R(14,52,20,8,P.top);
+      R(11,56,26,6,O); R(12,57,24,4,P.top); R(12,59,24,2,P.topDk);
+      /* Wespentaille */
+      R(15,43,18,10,O); R(16,44,16,8,P.top);
+      R(17,44,3,8,P.topHi);
+      /* Brustkorb/Schultern */
+      R(12,32-e+yb,24,13+e,O);
+      R(13,33-e+yb,22,11+e,P.top);
+      R(13,33-e+yb,22,2,P.topHi);
+      R(15,36+yb,3,8,P.topHi); R(30,37+yb,3,7,P.topDk);
+    }
+    /* Linker Arm — hängt mit leichtem Bogen, Riesenhand */
+    R(8,34-e+yb,6,13,O); R(9,35-e+yb,4,11,P.topDk);
+    R(6,45,6,12,O); R(7,46,4,10,P.topDk);
+    R(3,55,10,9,O); R(4,56,8,7,P.skin); R(4,56,8,1,'#ffe3c4');
+    R(6,60,1,3,P.skinDk); R(9,60,1,3,P.skinDk);
+    /* Rechter Arm — Hand in der Hüfte (entfällt beim Kratzen) */
+    if(!scratching){
+      R(34,34-e+yb,6,11,O); R(35,35-e+yb,4,9,P.topDk);
+      R(35,43,7,6,O); R(36,44,5,4,P.topDk);
+      R(31,47,9,8,O); R(32,48,7,6,P.skin);
+      R(32,48,7,1,'#ffe3c4');
+    }
+  }
+
+  /* Hals — dünn */
+  R(20,ty-5+yb,8,6,O); R(21,ty-5+yb,6,5,P.skinSh); R(22,ty-5+yb,4,4,P.skin);
+
+  /* Haar hinten */
+  if(P.bun){
+    /* Jonas: kurzer Schopf + Dutt */
+    R(8,0+yh,32,16,O);
+    R(9,1+yh,30,14,P.hairDk);
+    R(18,-6+yh,12,8,O); R(19,-5+yh,10,6,P.hair); R(20,-5+yh,4,2,P.hairHi);
+  }else{
+    /* Lauren: große Masse bis auf die Schultern */
+    R(7,0+yh,34,ty+9,O);
+    R(8,1+yh,32,ty+7,P.hairDk);
+    R(8,1+yh,32,3,P.hairMid);
+  }
+
+  /* Kopf — riesig */
+  R(10,2+yh,28,28,O);
+  R(11,3+yh,26,26,P.skin);
+  R(13,2+yh,22,2,P.skin);
+  R(14,28+yh,20,3,P.skin); R(16,30+yh,16,2,P.skin);
+  R(11,3+yh,26,2,'#ffe6cc');
+  R(34,5+yh,3,22,P.skinSh); R(11,6+yh,2,20,P.skinSh);
+  /* Ohren */
+  R(8,14+yh,3,8,O); R(37,14+yh,3,8,O);
+  R(9,15+yh,2,6,P.skin); R(37,15+yh,2,6,P.skin);
+
+  /* Haar vorne */
+  R(9,0+yh,30,7,P.hair);
+  R(11,0+yh,22,2,P.hairHi);
+  R(15,6+yh,3,2,P.hairMid); R(22,5+yh,3,3,P.hairMid); R(30,6+yh,3,2,P.hairMid); // Pony-Zacken
+  if(P.bun){
+    R(8,4+yh,4,10,P.hair); R(36,4+yh,4,10,P.hair);   // kurze Koteletten
+  }else{
+    /* Säulen enden auf Wangenhöhe, fallen dann HINTER die Schulter (kein "Bart") */
+    R(4,16+yh,6,ty-8,O); R(38,16+yh,6,ty-8,O);
+    R(8,4+yh,4,16,P.hair); R(36,4+yh,4,16,P.hair);
+    R(8,4+yh,1,14,P.hairMid); R(39,4+yh,1,14,P.hairMid);
+    R(6,18+yh,4,8,P.hair); R(38,18+yh,4,8,P.hair);
+    R(5,24+yh,4,ty-16,P.hairDk); R(39,24+yh,4,ty-16,P.hairDk);
+    R(9,15+yh,2,6,P.hairMid); R(37,16+yh,2,6,P.hairMid);
+  }
+  if(P.band){ R(9,7+yh,30,3,P.band); R(9,7+yh,30,1,'#e89a5c'); }   // Stirnband
+
+  /* Gesicht — große Züge */
+  const bl0=(laughing||rolling)?9:scratching?9:11;
+  const br0=scratching?12:bl0;
+  R(14,bl0+yh,7,2,O); R(27,br0+yh,7,2,O);
+  if(laughing){
+    R(14,15+yh,7,2,O); R(27,15+yh,7,2,O);
+    R(13,13+yh,2,2,O); R(20,13+yh,2,2,O);
+    R(26,13+yh,2,2,O); R(33,13+yh,2,2,O);
+  }else if(blink){
+    R(14,16+yh,7,2,O); R(27,16+yh,7,2,O);
+  }else{
+    let ox=0,oy=0;
+    if(rolling){const p=a/1.1;ox=p<0.33?-1:p<0.66?0:1;oy=-1;}
+    else if(scratching){ox=1;}
+    R(13,12+yh,8,8,O); R(26,12+yh,8,8,O);
+    R(14,13+yh,6,6,P.white); R(27,13+yh,6,6,P.white);
+    R(15+ox,13+yh+oy,4,6,P.iris); R(28+ox,13+yh+oy,4,6,P.iris);
+    R(16+ox,15+yh+oy,2,3,P.pupil); R(29+ox,15+yh+oy,2,3,P.pupil);
+    R(15,14+yh,1,1,'#ffffff'); R(28,14+yh,1,1,'#ffffff');
+  }
+  /* Knollennase */
+  R(22,18+yh,4,5,P.skinSh); R(21,22+yh,6,2,P.skinDk);
+  /* Mund — breit */
+  if(laughing){
+    R(15,24+yh,18,6,O);
+    R(16,25+yh,16,4,'#5a2630');
+    R(17,25+yh,14,1,'#f6f2ec');
+    R(20,28+yh,8,1,'#c4606a');
+  }else if(mo==='roll'){
+    R(17,26+yh,12,2,O); R(17,28+yh,2,1,O);
+  }else if(mo==='scratch'){
+    R(18,26+yh,10,2,P.lip); R(28,25+yh,2,2,P.skinDk);
+  }else if(talking&&Math.sin(t/130)>0){
+    R(16,24+yh,15,5,O);                          // Lip-Flap beim Sprechen
+    R(17,25+yh,13,3,'#5a2630');
+    R(18,25+yh,11,1,'#f6f2ec');
+  }else{
+    R(16,25+yh,15,2,P.lip); R(18,27+yh,11,1,P.lipHi);
+  }
+  R(11,20+yh,4,3,P.blush); R(33,20+yh,4,3,P.blush);
+  if(laughing){R(10,19+yh,5,4,P.blush);R(33,19+yh,5,4,P.blush);}
+  /* Bart (Jonas) */
+  if(P.beard){
+    R(12,24+yh,24,6,P.beard); R(14,29+yh,20,3,P.beard);
+    R(16,25+yh,15,2,P.lip);
+  }
+  /* Rimlight — warmes Kantenlicht von oben rechts */
+  R(35,5+yh,2,20,'rgba(255,224,170,0.28)');
+  R(33,33-e+yb,2,10,'rgba(255,224,170,0.20)');
+  if(!sitting)R(32,52,2,7,'rgba(255,224,170,0.16)');
+  /* Am Kopf kratzen */
+  if(scratching){
+    const j=Math.sin(t/110)>0?0:1;
+    const ab=sitting?32:34;
+    R(ab,34-e+yb,6,10,O); R(ab+1,35-e+yb,4,8,P.topDk);
+    R(37,18+yh-j,6,18,O); R(38,19+yh-j,4,16,P.topDk);
+    R(33,11+yh-j,10,9,O); R(34,12+yh-j,8,7,P.skin);
+    R(35,15+yh-j,1,3,P.skinDk); R(38,15+yh-j,1,3,P.skinDk);
+  }
+  PS=1;
+}
+
+/* ================= Figuren V3 — Kurven statt Klötze =================
+   Vektor-Cartoon: runder Kopf mit Bob, Sanduhr-Torso, Stroke-Gliedmaßen
+   mit runden Kappen, Riesenhände. Überschreibt figure() erneut.
+   Einheitenraum 48 x ~92 (stehend) / 48 x ~70 (sitzend). */
+function figure(cx,top,s,P,t,breath,sitting,phase,blinkOff,mood,age,talking,walking,prop,face,socks){
+  const O='#12091e';
+  const m=(face<0?-1:1), fx=(face||0)*3.2;      // Dreiviertel-Blick: Gesicht rückt zur Blickseite
+  const mo=mood||'neutral', a=age||0;
+  let chewing=false;
+  const laughing=(mo==='laugh'&&a<3.4);
+  const rolling=(mo==='roll'&&a<1.1);
+  const scratching=(mo==='scratch'&&a<3.4);
+  const medi=(mo==='medi');                       // meditiert: Augen zu, Atem sichtbar
+  const cyc=(t+phase*1000)%4200;
+  const blink=(laughing||medi)?true:(!blinkOff&&(cyc<130||(cyc>1700&&cyc<1810)));
+  const sway=Math.sin(t/1500+phase)*0.6;
+  const bounce=laughing?(Math.sin(t/95)>0?0:1.2):0;
+  const c=ctx;
+  c.save(); c.translate(cx,top); c.scale(s,s);
+  c.lineJoin='round'; c.lineCap='round';
+
+  const F=fill=>{c.fillStyle=fill;c.fill();c.strokeStyle=O;c.lineWidth=1.15;c.stroke();};
+  const limb=(pts,w,col)=>{
+    c.beginPath();c.moveTo(pts[0][0],pts[0][1]);
+    for(let i=1;i<pts.length;i+=2)c.quadraticCurveTo(pts[i][0],pts[i][1],pts[i+1][0],pts[i+1][1]);
+    c.strokeStyle=O;c.lineWidth=w+2;c.stroke();
+    c.strokeStyle=col;c.lineWidth=w;c.stroke();
+  };
+  const hand=(x,y,r)=>{
+    c.beginPath();c.ellipse(x,y,r,r*0.92,0,0,7);F(P.skin);
+    c.strokeStyle=P.skinDk;c.lineWidth=0.6;
+    c.beginPath();c.moveTo(x-r*0.35,y+r*0.35);c.lineTo(x-r*0.35,y+r*0.72);
+    c.moveTo(x+r*0.15,y+r*0.4);c.lineTo(x+r*0.15,y+r*0.75);c.stroke();
+  };
+
+  const HX=24;
+  const shY=(sitting?32:33)-(breath-0.5)*2.4+sway*0.3;   // Schulterlinie atmet
+
+  /* ---------- Unterbau ---------- */
+  if(sitting){
+    c.beginPath();
+    c.moveTo(2,66);c.quadraticCurveTo(4,52,16,52);
+    c.lineTo(32,52);c.quadraticCurveTo(44,52,46,66);
+    c.quadraticCurveTo(24,70,2,66);c.closePath();F(P.pants);
+    // angedeutete überkreuzte Schienbeine — kein "Rock"-Kegel mehr
+    limb([[11,60.5],[24,55.5],[37,61.5]],4.2,P.pants);
+    limb([[37,60],[24,55],[11,61]],4.2,P.pants);
+  }else{
+    const swing=walking?Math.sin(t/130)*4:0;
+    limb([[19,56],[18,70],[18+swing*0.4,84]],6.5,P.pants);
+    limb([[29,56],[30,70],[30-swing*0.4,84]],6.5,P.pants);
+    if(socks){                                     // Schuhe sind aus — Sockenfüße
+      c.beginPath();c.ellipse(15+swing*0.4,87.5,6.8,3.1,0,0,7);F(P.sockCol||'#e8e4da');
+      c.beginPath();c.ellipse(33-swing*0.4,88.5,6.8,3.1,0,0,7);F(P.sockCol||'#e8e4da');
+      if(P.sneaker){                               // Kevins berühmtes Loch — "damit der Zeh was sieht"
+        c.fillStyle=P.skin;c.beginPath();c.ellipse(18.5+swing*0.4,86.6,1.5,1.1,0,0,7);c.fill();
+      }
+      if(P.bun){                                   // Jonas' berühmte Zehensocken
+        c.strokeStyle='#c8703c';c.lineWidth=1;
+        c.beginPath();c.moveTo(10,86.4);c.lineTo(12,88.6);c.moveTo(13.4,86);c.lineTo(15.4,88.2);c.moveTo(16.8,86.2);c.lineTo(18.4,88);c.stroke();
+        c.beginPath();c.moveTo(28,87.4);c.lineTo(30,89.6);c.moveTo(31.4,87);c.lineTo(33.4,89.2);c.moveTo(34.8,87.2);c.lineTo(36.4,89);c.stroke();
+      }
+    }else{
+    c.beginPath();c.ellipse(15+swing*0.4,87.5,8.2,3.6,0,0,7);F(P.sneaker||'#1c1c28');
+    c.beginPath();c.ellipse(33-swing*0.4,88.5,8.2,3.6,0,0,7);F(P.sneaker||'#1c1c28');
+    if(P.sneaker&&!socks){                                 // weiße Sneaker: dunkle Streifen + Sohle
+      c.strokeStyle='#3a3a44';c.lineWidth=0.8;
+      c.beginPath();c.moveTo(11+swing*0.4,86.6);c.lineTo(14+swing*0.4,88.6);
+      c.moveTo(14+swing*0.4,86.2);c.lineTo(17+swing*0.4,88.2);c.stroke();
+      c.beginPath();c.moveTo(29-swing*0.4,87.6);c.lineTo(32-swing*0.4,89.6);
+      c.moveTo(32-swing*0.4,87.2);c.lineTo(35-swing*0.4,89.2);c.stroke();
+      c.fillStyle='#b8b8c0';
+      c.fillRect(7.5+swing*0.4,89.6,15,1.2);c.fillRect(25.5-swing*0.4,90.6,15,1.2);
+    }
+    }
+  }
+
+  /* ---------- Torso ---------- */
+  c.beginPath();
+  if(P.stout){
+    c.moveTo(HX-13,shY);
+    c.quadraticCurveTo(HX-17,shY+12,HX-14,(sitting?52:56));
+    c.quadraticCurveTo(HX,(sitting?58:62),HX+14,(sitting?52:56));
+    c.quadraticCurveTo(HX+17,shY+12,HX+13,shY);
+    c.quadraticCurveTo(HX,shY-3,HX-13,shY);
+  }else if(P.straight){
+    // Kevin: gerader Männer-Torso, Hemd fällt locker — keine Taille
+    c.moveTo(HX-12,shY);
+    c.quadraticCurveTo(HX-13.5,shY+14,HX-12.5,(sitting?53:60));
+    c.lineTo(HX+12.5,(sitting?53:60));
+    c.quadraticCurveTo(HX+13.5,shY+14,HX+12,shY);
+    c.quadraticCurveTo(HX,shY-3,HX-12,shY);
+  }else{
+    c.moveTo(HX-12,shY);
+    c.quadraticCurveTo(HX-13,shY+8,HX-7,shY+14);
+    c.quadraticCurveTo(HX-15,(sitting?48:54),HX-13,(sitting?53:60));
+    c.lineTo(HX+13,(sitting?53:60));
+    c.quadraticCurveTo(HX+15,(sitting?48:54),HX+7,shY+14);
+    c.quadraticCurveTo(HX+13,shY+8,HX+12,shY);
+    c.quadraticCurveTo(HX,shY-3,HX-12,shY);
+  }
+  c.closePath();F(P.top);
+  c.beginPath();c.moveTo(HX-8,shY+2);c.quadraticCurveTo(HX-10,shY+10,HX-6,shY+16);
+  c.strokeStyle=P.topHi;c.lineWidth=2;c.stroke();
+  if(P.jacket){
+    // Offene Jacke über dem Top — zwei Seitenpaneele + Kragen
+    const hem=sitting?52:58;
+    c.beginPath();c.moveTo(HX-12.5,shY+0.5);
+    c.quadraticCurveTo(HX-14.5,shY+12,HX-13,hem);
+    c.lineTo(HX-7.5,hem);
+    c.quadraticCurveTo(HX-9,shY+12,HX-8,shY+1.5);
+    c.closePath();F(P.jacket);
+    c.beginPath();c.moveTo(HX+12.5,shY+0.5);
+    c.quadraticCurveTo(HX+14.5,shY+12,HX+13,hem);
+    c.lineTo(HX+7.5,hem);
+    c.quadraticCurveTo(HX+9,shY+12,HX+8,shY+1.5);
+    c.closePath();F(P.jacket);
+    c.beginPath();c.moveTo(HX-8,shY+0.5);c.lineTo(HX-3.5,shY+4.5);c.lineTo(HX-8.5,shY+6.5);c.closePath();F(P.jacketDk);
+    c.beginPath();c.moveTo(HX+8,shY+0.5);c.lineTo(HX+3.5,shY+4.5);c.lineTo(HX+8.5,shY+6.5);c.closePath();F(P.jacketDk);
+  }
+  if(P.stout){
+    c.beginPath();c.ellipse(HX,shY+16,9,7,0,0,7);
+    c.fillStyle='rgba(0,0,0,0.08)';c.fill();
+  }
+  if(P.tee){
+    // Offenes Hemd: T-Shirt-Ausschnitt + Goldkette + Medaille
+    c.beginPath();c.moveTo(HX-5,shY+0.5);c.lineTo(HX+5,shY+0.5);c.lineTo(HX,shY+11);c.closePath();F(P.tee);
+    c.strokeStyle='#d8b04a';c.lineWidth=0.9;
+    c.beginPath();c.moveTo(HX-4,shY+1.5);c.quadraticCurveTo(HX,shY+6.5,HX+4,shY+1.5);c.stroke();
+    if(P.medal){
+      c.strokeStyle='#b83a30';c.lineWidth=1.4;
+      c.beginPath();c.moveTo(HX-4.6,shY+1);c.lineTo(HX-1,shY+10);c.moveTo(HX+4.6,shY+1);c.lineTo(HX+1,shY+10);c.stroke();
+      c.beginPath();c.arc(HX,shY+12.5,3,0,7);F('#a06a34');
+      c.strokeStyle='#6e441c';c.lineWidth=0.8;
+      c.beginPath();c.arc(HX,shY+12.5,1.6,0,7);c.stroke();
+    }
+  }
+
+  /* ---------- Arme + Requisit in der Hand ---------- */
+  const drawProp=(hx,hyy)=>{
+    if(prop==='riegel'){
+      c.save();c.translate(hx,hyy);c.rotate(-0.5);
+      c.beginPath();c.rect(-3,-13,6,15);F('#6a3a1c');
+      c.fillStyle='#c8a03c';c.fillRect(-3,-13,6,5.5);
+      c.fillStyle='#4e2a14';c.fillRect(-3,-7,6,1.4);
+      c.restore();
+    }else if(prop==='phone'){
+      c.save();c.translate(hx+3,hyy-8);c.rotate(-0.35);
+      c.beginPath();c.rect(-3.2,-7,6.4,13);F('#101018');
+      c.fillStyle='#9ad8f0';c.fillRect(-2.3,-5.6,4.6,9.6);
+      c.fillStyle='#d8f2fc';c.fillRect(-1.6,-4.6,3.2,1.2);
+      c.restore();
+    }else if(prop==='bottle'){
+      c.save();c.translate(hx,hyy);
+      c.beginPath();c.rect(-3.4,-19,6.8,20);F('#4e2415');          // braune Glasflasche
+      c.fillStyle='rgba(255,255,255,0.18)';c.fillRect(-2.6,-18,1.4,18);
+      c.fillStyle='#e8dcc0';c.fillRect(-3.4,-12,6.8,6.2);          // Etikett
+      c.fillStyle='#c8462e';c.fillRect(-3.4,-12,6.8,1.8);          // rotes Band
+      c.fillStyle='#c8462e';c.fillRect(-3.4,-7.4,6.8,1.2);
+      c.fillStyle='#3a2a24';c.fillRect(-1.7,-23.6,3.4,5);          // Flaschenhals
+      c.fillStyle='#e8c45a';c.fillRect(-1.7,-24.4,3.4,1.2);        // Kronkorken
+      c.restore();
+    }
+  };
+  if(sitting){
+    limb([[HX-11,shY+3],[HX-17,shY+13],[9,48]],4.6,P.jacket||P.topDk);
+    hand(9,51,5.2);
+    if(!scratching){ limb([[HX+11,shY+3],[HX+17,shY+13],[39,48]],4.6,P.jacket||P.topDk); hand(39,51,5.2); }
+  }else{
+    if(prop==='riegel'&&Math.sin(t/850)>0.1){
+      // Sie hebt den Riegel zum Mund und beißt ab
+      chewing=true;
+      limb([[HX-11,shY+3],[HX-20,shY+9],[HX-11,27]],4.6,P.jacket||P.topDk);
+      hand(HX-10,27.5,5.2);
+      c.save();c.translate(HX-9,25.5);c.rotate(1.9);
+      c.beginPath();c.rect(-3,-12,6,14);F('#6a3a1c');
+      c.fillStyle='#c8a03c';c.fillRect(-3,0,6,2);
+      c.fillStyle='#4e2a14';c.fillRect(-3,-11,6,1.4);
+      c.restore();
+      c.fillStyle=P.skin;c.beginPath();c.ellipse(HX-10,26.5,2.4,1.7,0.35,0,7);c.fill();
+    }else{
+      limb([[HX-11,shY+3],[HX-17,shY+13],[HX-15,55]],4.6,P.jacket||P.topDk);
+      hand(HX-15,60,5.6);
+      drawProp(HX-15,58);                        // Requisit VOR der Hand — sie hält es sichtbar
+      if(prop){c.fillStyle=P.skin;c.beginPath();c.ellipse(HX-15,58.5,2.4,1.7,0.35,0,7);c.fill();}
+    }
+    if(!scratching){
+      limb([[HX+11,shY+3],[HX+21,shY+10],[HX+17,49]],4.6,P.jacket||P.topDk);
+      hand(HX+15,51,4.6);
+    }
+  }
+
+  /* ---------- Kopf ---------- */
+  const hy=sway*0.5-bounce+(laughing?-1.5:0);
+  if(P.cap){
+    // strubbelige blonde Büschel, die unterm Cap rausstehen
+    [[-14,12],[14,12],[-12,17.5],[12,17.5],[-9,21],[9,21]].forEach(pt=>{
+      c.beginPath();c.ellipse(HX+pt[0],pt[1]+hy,4.4,3.2,pt[0]*0.05,0,7);F(P.hair);
+    });
+  }else if(P.bun){
+    c.beginPath();c.ellipse(HX,11+hy,16.5,14,0,0,7);F(P.hairDk);
+    c.beginPath();c.ellipse(HX,-3.5+hy,6,4.4,0,0,7);F(P.hair);
+  }else{
+    // Bob mit Welle: liegt an der Wange an, schwingt unten nach außen
+    c.beginPath();
+    c.moveTo(HX-17,7+hy);
+    c.quadraticCurveTo(HX-21,17+hy,HX-17,26+hy);
+    c.quadraticCurveTo(HX-20,32+hy,HX-13,31+hy);
+    c.quadraticCurveTo(HX-7,34+hy,HX,31.5+hy);
+    c.quadraticCurveTo(HX+7,34+hy,HX+13,31+hy);
+    c.quadraticCurveTo(HX+20,32+hy,HX+17,26+hy);
+    c.quadraticCurveTo(HX+21,17+hy,HX+17,7+hy);
+    c.quadraticCurveTo(HX,-6+hy,HX-17,7+hy);
+    c.closePath();F(P.hairDk);
+    c.strokeStyle=P.hairMid;c.lineWidth=1;
+    c.beginPath();c.moveTo(HX-15,12+hy);c.quadraticCurveTo(HX-17,20+hy,HX-14,27+hy);c.stroke();
+    c.beginPath();c.moveTo(HX+15,12+hy);c.quadraticCurveTo(HX+17,20+hy,HX+14,27+hy);c.stroke();
+  }
+  c.fillStyle=P.skin;c.fillRect(HX-2.6,shY-8.5,5.2,9.5);     // ganz normaler Hals: Hautfarbe, kein Kasten
+  c.fillStyle='rgba(0,0,0,0.10)';c.fillRect(HX-2.6,shY-8.5,5.2,1.8);
+  c.beginPath();c.ellipse(HX,17+hy,14.5,15.5,0,0,7);F(P.skin);
+  c.beginPath();c.ellipse(HX,26+hy,9.5,7,0,0,7);c.fillStyle=P.skin;c.fill();
+  // Nur das hintere Ohr ist sichtbar (Dreiviertel-Ansicht)
+  if((face||0)>=0){c.beginPath();c.ellipse(HX-15.5,18+hy,2.4,3.4,0,0,7);F(P.skin);}
+  if((face||0)<=0){c.beginPath();c.ellipse(HX+15.5,18+hy,2.4,3.4,0,0,7);F(P.skin);}
+  if(!P.bun&&!P.cap){                                        // Goldohrring am sichtbaren Ohr
+    c.fillStyle='#e8c45a';
+    const eaX=(face||0)>0?HX-16:HX+16;
+    c.beginPath();c.arc(eaX,22.5+hy,1.8,0,7);c.fill();
+    c.fillStyle='#fff2c0';c.beginPath();c.arc(eaX-0.5,22+hy,0.6,0,7);c.fill();
+  }
+  // Pony mit Bögen
+  if(P.cap){
+    // Baseball-Cap mit Schirm in Blickrichtung
+    c.beginPath();c.moveTo(HX-15,9+hy);
+    c.quadraticCurveTo(HX-16,-3+hy,HX,-4+hy);
+    c.quadraticCurveTo(HX+16,-3+hy,HX+15,9+hy);
+    c.quadraticCurveTo(HX,5.5+hy,HX-15,9+hy);c.closePath();F(P.cap);
+    c.beginPath();c.ellipse(HX+m*13,8.8+hy,9.5,2.8,m*0.16,0,7);F(P.cap);
+    c.fillStyle='#e8e8ee';c.fillRect(HX-4+fx*0.4,0.2+hy,8,3.4);   // "GOOD VIBES"-Patch
+    c.fillStyle='#16161e';
+    c.fillRect(HX-2.8+fx*0.4,1.2+hy,1.3,1.5);c.fillRect(HX-0.6+fx*0.4,1.2+hy,1.3,1.5);c.fillRect(HX+1.6+fx*0.4,1.2+hy,1.3,1.5);
+  }else{
+    c.beginPath();
+    c.moveTo(HX-15,10+hy);
+    c.quadraticCurveTo(HX-16,2+hy,HX-8,1+hy);
+    c.quadraticCurveTo(HX,-1+hy,HX+8,1+hy);
+    c.quadraticCurveTo(HX+16,2+hy,HX+15,10+hy);
+    c.quadraticCurveTo(HX+9,6+hy,HX+5,10+hy);
+    c.quadraticCurveTo(HX+1,6+hy,HX-4,10+hy);
+    c.quadraticCurveTo(HX-9,6+hy,HX-15,10+hy);
+    c.closePath();F(P.hair);
+    if(!P.bun){
+      // Haarspange an der Pony-Seitenkante
+      c.save();c.translate(HX-13.5,7+hy);c.rotate(0.5);
+      c.fillStyle='#c8703c';c.fillRect(0,0,4.6,1.8);
+      c.fillStyle='#e89a5c';c.fillRect(0,0,4.6,0.7);
+      c.restore();
+    }
+    if(P.band){
+      c.beginPath();c.moveTo(HX-14,7.5+hy);c.quadraticCurveTo(HX,4+hy,HX+14,7.5+hy);
+      c.strokeStyle=P.band;c.lineWidth=2.6;c.stroke();
+    }
+    c.beginPath();c.moveTo(HX-9,2.5+hy);c.quadraticCurveTo(HX-2,0.5+hy,HX+6,2+hy);
+    c.strokeStyle=P.hairHi;c.lineWidth=1.4;c.stroke();
+  }
+
+  /* ---------- Gesicht ---------- */
+  const exL=HX-6+fx, exR=HX+6+fx, ey=15+hy, MX=HX+fx;
+  const bTilt=laughing?-1.4:rolling?-1.2:0;
+  c.strokeStyle=P.hairDk;c.lineWidth=1.7;
+  c.beginPath();c.moveTo(exL-3.6,ey-5.4+bTilt-(scratching?1.4:0));
+  c.quadraticCurveTo(exL,ey-6.6+bTilt-(scratching?1.4:0),exL+3.6,ey-5.2+bTilt);c.stroke();
+  c.beginPath();c.moveTo(exR-3.6,ey-5.2+bTilt);
+  c.quadraticCurveTo(exR,ey-6.6+bTilt+(scratching?0.8:0),exR+3.6,ey-5.4+bTilt+(scratching?1.2:0));c.stroke();
+
+  if(laughing){
+    c.strokeStyle=O;c.lineWidth=1.4;
+    c.beginPath();c.moveTo(exL-3,ey);c.quadraticCurveTo(exL,ey-2.8,exL+3,ey);c.stroke();
+    c.beginPath();c.moveTo(exR-3,ey);c.quadraticCurveTo(exR,ey-2.8,exR+3,ey);c.stroke();
+  }else if(blink){
+    c.strokeStyle=O;c.lineWidth=1.3;
+    c.beginPath();c.moveTo(exL-3,ey+0.6);c.quadraticCurveTo(exL,ey+1.8,exL+3,ey+0.6);c.stroke();
+    c.beginPath();c.moveTo(exR-3,ey+0.6);c.quadraticCurveTo(exR,ey+1.8,exR+3,ey+0.6);c.stroke();
+  }else{
+    let ox=0,oy=0;
+    if(rolling){const p=a/1.1;ox=p<0.33?-1.4:p<0.66?0:1.4;oy=-1.8;}
+    else if(scratching){ox=1.4;}
+    for(const ex of[exL,exR]){
+      c.beginPath();c.ellipse(ex,ey,3.6,4.4,0,0,7);F(P.white);
+      c.beginPath();c.ellipse(ex+ox,ey+oy,2.0,2.6,0,0,7);c.fillStyle=P.iris;c.fill();
+      c.beginPath();c.ellipse(ex+ox,ey+oy,1.0,1.4,0,0,7);c.fillStyle=P.pupil;c.fill();
+      c.beginPath();c.ellipse(ex+ox-0.8,ey+oy-1,0.6,0.8,0,0,7);c.fillStyle='#fff';c.fill();
+    }
+  }
+  if(P.glasses){                                             // getönte Brille über den Augen
+    c.fillStyle='rgba(235,110,55,0.42)';
+    c.strokeStyle='#2a1c14';c.lineWidth=1.1;
+    for(const ex of[exL,exR]){c.beginPath();c.rect(ex-4.3,ey-3.6,8.6,7);c.fill();c.stroke();}
+    c.beginPath();c.moveTo(exL+4.3,ey-1);c.lineTo(exR-4.3,ey-1);c.stroke();
+  }
+  c.strokeStyle=P.skinDk;c.lineWidth=1.1;
+  c.beginPath();c.moveTo(MX+0.5*m,ey+2);c.quadraticCurveTo(MX+2.4*m,ey+5,MX+0.2*m,ey+6.4);c.stroke();
+  if(P.stubble){                                             // Dreitagebart
+    c.fillStyle='rgba(105,80,55,0.20)';
+    c.beginPath();c.ellipse(MX*0.4+HX*0.6,26.5+hy,8.6,4.6,0,0,7);c.fill();
+  }
+
+  if(P.beard){
+    c.beginPath();
+    c.moveTo(HX-11,18+hy);
+    c.quadraticCurveTo(HX-12,30+hy,HX,33+hy);
+    c.quadraticCurveTo(HX+12,30+hy,HX+11,18+hy);
+    c.quadraticCurveTo(HX+6,24+hy,HX,24.5+hy);
+    c.quadraticCurveTo(HX-6,24+hy,HX-11,18+hy);
+    c.closePath();F(P.beard);
+  }
+
+  const my=ey+9.6;
+  if(laughing){
+    c.beginPath();c.moveTo(MX-6,my-1);c.quadraticCurveTo(MX,my+6,MX+6,my-1);
+    c.quadraticCurveTo(MX,my+1.2,MX-6,my-1);c.closePath();F('#5a2630');
+    c.fillStyle='#f6f2ec';c.fillRect(MX-4.4,my-0.9,8.8,1.4);
+    c.beginPath();c.ellipse(MX,my+3.2,2.6,1.4,0,0,7);c.fillStyle='#c4606a';c.fill();
+  }else if(medi){
+    if(breath>0.62){                               // einatmen: kleiner offener O-Mund
+      c.beginPath();c.ellipse(MX,my+0.4,2.2,2.7,0,0,7);F('#5a2630');
+    }else{                                         // ausatmen: entspannter Strich
+      c.strokeStyle=P.lip;c.lineWidth=1.5;
+      c.beginPath();c.moveTo(MX-3.5,my);c.lineTo(MX+3.5,my);c.stroke();
+    }
+  }else if(chewing){
+    if(Math.sin(t/150)>0){c.beginPath();c.ellipse(MX,my+0.3,2.6,2.2,0,0,7);F('#5a2630');}
+    else{c.strokeStyle=P.lip;c.lineWidth=1.6;
+      c.beginPath();c.moveTo(MX-3.5,my+0.4);c.lineTo(MX+3.5,my-0.2);c.stroke();}
+  }else if(talking&&Math.sin(t/130)>0){
+    c.beginPath();c.ellipse(MX,my+0.6,4.4,2.8,0,0,7);F('#5a2630');
+    c.fillStyle='#f6f2ec';c.fillRect(MX-3.2,my-1.2,6.4,1.2);
+  }else if(mo==='roll'){
+    c.strokeStyle='#a24e5e';c.lineWidth=1.5;
+    c.beginPath();c.moveTo(MX-4.6,my+1);c.quadraticCurveTo(MX,my-0.8,MX+4.6,my+0.2);c.stroke();
+  }else if(mo==='scratch'){
+    c.strokeStyle='#a24e5e';c.lineWidth=1.5;
+    c.beginPath();c.moveTo(MX-4.4,my);c.quadraticCurveTo(MX+1,my+1.8,MX+4.6,my-0.8);c.stroke();
+  }else{
+    c.strokeStyle=P.lip;c.lineWidth=1.7;
+    c.beginPath();c.moveTo(MX-5,my-0.6);c.quadraticCurveTo(MX,my+2.4,MX+5,my-0.6);c.stroke();
+  }
+  c.fillStyle='rgba(230,140,120,0.42)';
+  c.beginPath();c.ellipse(HX-9.5+fx*0.7,ey+5.5,2.6,1.6,0,0,7);c.fill();
+  c.beginPath();c.ellipse(HX+9.5+fx*0.7,ey+5.5,2.6,1.6,0,0,7);c.fill();
+
+  if(scratching){
+    const j=Math.sin(t/110)*1.2;
+    limb([[HX+11,shY+3],[HX+27,shY-10],[HX+18,3+hy+j]],4.6,P.jacket||P.topDk);
+    hand(HX+17,1.5+hy+j,4.6);
+  }
+
+  /* Rimlight */
+  c.strokeStyle='rgba(255,224,170,0.5)';c.lineWidth=1.1;
+  c.beginPath();c.moveTo(HX+10,5+hy);c.quadraticCurveTo(HX+15,14+hy,HX+12.5,24+hy);c.stroke();
+  c.restore();
+}
+
+/* Over-the-Shoulder: dein Hinterkopf + Schulter unten links — macht die POV eindeutig */
+function ownShoulder(t){
+  PS=1.5;
+  const b=Math.sin(t/1100)>0?0:1;
+  poly([[-6,202],[100,202],[92,176+b],[62,162+b],[24,160+b],[-6,172+b]],'#131120');
+  poly([[-6,172+b],[24,160+b],[62,162+b],[64,165+b],[24,163+b],[-6,175+b]],'#1e1a30');
+  ctx.save();ctx.scale(PS,PS);
+  ctx.fillStyle='#1b1529';ctx.beginPath();ctx.arc(30,150+b,17,0,7);ctx.fill();
+  ctx.fillStyle='#241b36';ctx.beginPath();ctx.arc(26,145+b,13,0,7);ctx.fill();
+  ctx.fillStyle='#8a6a52';ctx.beginPath();ctx.ellipse(44,151+b,2.8,4.2,0,0,7);ctx.fill();
+  ctx.restore();
+  PS=1;
+}
+
+/* Deine eigenen Knie (POV), 320x200-Koordinaten */
+function ownKnees(breath){
+  PS=1.5;
+  const lift=Math.round(breath*2);
+  px(-8,178-lift,92,30,'#39496e');
+  px(2,178-lift,72,3,'#4f628e');
+  px(2,181-lift,72,1,'#2c3a5c');
+  px(238,180-lift,94,28,'#39496e');
+  px(248,180-lift,74,3,'#4f628e');
+  px(50,184-lift,26,10,'#f0c8a4');
+  px(50,184-lift,26,2,'#ffdcb8');
+  px(54,188-lift,3,6,'#d8ac88');px(60,188-lift,3,6,'#d8ac88');px(66,188-lift,3,6,'#d8ac88');
+  px(248,186-lift,26,10,'#f0c8a4');
+  px(248,186-lift,26,2,'#ffdcb8');
+  px(252,190-lift,3,5,'#d8ac88');px(258,190-lift,3,5,'#d8ac88');px(264,190-lift,3,5,'#d8ac88');
+  PS=1;
+}
+function ownBottle(t){
+  PS=1.5;
+  const b=Math.sin(t/900)>0?0:1;
+  // Arm wächst aus DEINER Schulter-Silhouette (unten links) zur Faust
+  poly([[52,202],[64,200],[104,166+b],[96,160+b],[58,186+b]],'#1e2438');
+  poly([[58,186+b],[96,160+b],[98,163+b],[60,189+b]],'#2c3452');
+  ctx.save();ctx.scale(PS,PS);
+  ctx.fillStyle='#e6ba92';ctx.beginPath();ctx.ellipse(101,158+b,8,7,0.3,0,7);ctx.fill();
+  ctx.fillStyle='#f6d2ac';ctx.beginPath();ctx.ellipse(99,155+b,4,3,0.3,0,7);ctx.fill();
+  ctx.restore();
+  // Spezi: braune Glasflasche, Kronkorken, rot-weißes Etikett
+  px(96,118+b,13,38,'#4e2415');
+  px(98,120+b,3,32,'rgba(255,255,255,0.20)');
+  px(96,118+b,13,3,'#c8462e');
+  px(99,109+b,7,10,'#3a2a24');px(99,107+b,7,3,'#e8c45a');
+  px(96,132+b,13,12,'#e8dcc0');
+  px(96,132+b,13,2.4,'#c8462e');px(96,141+b,13,1.6,'#c8462e');
+  px(93,152+b,7,8,'#e6ba92');                    // Daumen vor der Flasche
+  PS=1;
+  ctx.save();ctx.translate(146,Math.round((135+b)*1.5));ctx.rotate(-0.05);
+  ctx.font='bold 8px ui-monospace,monospace';ctx.textBaseline='top';
+  ctx.fillStyle='#b8341e';ctx.fillText('SPEZI',0,0);ctx.restore();
+}
+
+/* ================= Szenen (320x200-Koordinaten, PS=1.5) ================= */
+/* DOTT-Optik: nichts steht gerade. Wände kippen, Böden fluchten, Licht fällt in Kegeln. */
+
+function starsIn(t,x0,x1,y0,y1,mul){
+  for(const s of stars){if(s.x<x0||s.x>x1||s.y<y0||s.y>y1)continue;
+    const tw=.5+.5*Math.sin(t/420+s.b*9),v=((mul||170)*tw)|0;dot(s.x,s.y,`rgb(${v},${v},${v+30})`);}
+}
+/* Dielenfugen, die auf einen Fluchtpunkt zulaufen */
+function floorSeams(vpx,yTop,col){
+  for(let x=-40;x<=360;x+=36){
+    const tx=vpx+(x-vpx)*0.22;
+    poly([[x,200],[x+3,200],[tx+1,yTop],[tx,yTop]],col);
+  }
+}
+/* Rot gestreifter Teppich in Perspektive — wie im Vorbild */
+function rug(cx,yTop,wTop,yBot,wBot){
+  poly([[cx-wTop/2,yTop],[cx+wTop/2,yTop],[cx+wBot/2,yBot],[cx-wBot/2,yBot]],'#8c2320');
+  for(let i=0;i<6;i++){
+    const a=i/6,b=(i+0.55)/6;
+    const y1=yTop+(yBot-yTop)*a,y2=yTop+(yBot-yTop)*b;
+    const w1=wTop+(wBot-wTop)*a,w2=wTop+(wBot-wTop)*b;
+    poly([[cx-w1/2,y1],[cx+w1/2,y1],[cx+w2/2,y2],[cx-w2/2,y2]],i%2?'#b3502c':'#6e1a1a');
+  }
+  for(let f=-wBot/2+3;f<wBot/2-3;f+=8)px(cx+f,yBot-1,3,3,'#c9a44a');
+}
+
+function sceneFront(t){
+  PS=1.5;
+  dgrad(0,0,320,64,['#0a0830','#121048','#1c1858']);
+  starsIn(t,0,320,0,42,150);moon(300,36,6);
+  // Fassade, nach rechts weggekippt
+  poly([[0,26],[320,44],[320,142],[0,116]],'#3f2c66');
+  poly([[0,26],[320,44],[320,50],[0,32]],'#5f478e');
+  for(let i=1;i<7;i++)poly([[i*46,28+i*2.6],[i*46+2,28+i*2.6],[i*46+5,114+i*3.4],[i*46+3,114+i*3.4]],'rgba(18,10,38,0.5)');
+  // Obergeschossfenster — jedes anders schief
+  [[16,38,1,0],[68,44,-2,1],[214,54,2,0],[266,60,-1,1]].forEach(([wx,wy,sk,on])=>{
+    poly([[wx,wy],[wx+27,wy+sk],[wx+27,wy+20+sk],[wx,wy+20]],'#241a4a');
+    poly([[wx+2,wy+2],[wx+25,wy+2+sk],[wx+25,wy+18+sk],[wx+2,wy+18]],on?'#e8b45e':'#120e2e');
+    if(on)poly([[wx-2,wy-2],[wx+29,wy-2+sk],[wx+29,wy+22+sk],[wx-2,wy+22]],'rgba(232,180,94,0.08)');
+  });
+  // Studio-Schaufenster, warm, trapezförmig
+  poly([[92,60],[228,70],[226,124],[94,116]],'#2a1c4c');
+  poly([[97,64],[223,74],[221,120],[99,112]],'#f4c268');
+  poly([[97,64],[223,74],[222,81],[98,71]],'#ffe9b0');
+  // Pflanzen + zwei Silhouetten drin
+  poly([[112,111],[121,112],[122,88],[113,89]],'#274e2a');poly([[106,92],[128,90],[118,72],[108,77]],'#3c7a40');
+  poly([[196,114],[205,115],[204,92],[195,93]],'#274e2a');poly([[189,95],[210,94],[202,80],[191,83]],'#3c7a40');
+  poly([[140,112],[151,113],[150,79],[141,80]],'#6a4a28');
+  poly([[161,113],[171,114],[170,83],[162,84]],'#6a4a28');
+  // Lichtkegel aufs Trottoir
+  poly([[97,70],[223,80],[290,200],[48,200]],'rgba(255,206,120,0.09)');
+  // Schild, schief montiert
+  poly([[116,38],[206,50],[203,68],[113,55]],'#161028');
+  poly([[119,41],[203,53],[200,65],[116,52]],'#2f2352');
+  PS=1;
+  ctx.save();ctx.translate(184,68);ctx.rotate(0.09);
+  ctx.font='bold 14px ui-monospace,"Courier New",monospace';ctx.textBaseline='top';
+  ctx.fillStyle='#ffd98a';ctx.fillText('ATEM RAUM',0,0);ctx.restore();
+  PS=1.5;
+  // Tür, leicht aus dem Lot
+  poly([[238,64],[278,70],[278,134],[238,126]],'#20163c');
+  poly([[242,68],[274,74],[274,130],[242,122]],'#43305e');
+  poly([[244,72],[271,78],[271,97],[244,90]],'#d8b070');
+  px(246,108,3,3,'#ffe9a8');
+  // Gehweg mit Fluchtfugen
+  poly([[0,116],[320,142],[320,200],[0,200]],'#2c2a4c');
+  poly([[0,116],[320,142],[320,147],[0,121]],'#4c4676');
+  for(let x=-20;x<=340;x+=46){
+    const tx=160+(x-160)*0.45;
+    poly([[x,200],[x+3,200],[tx+2,124+((tx-160)*0.08)],[tx,124+((tx-160)*0.08)]],'rgba(12,10,30,0.45)');
+  }
+  // Kundenstopper vorm Studio (lesbarer als die alte Fahrrad-Strichfigur)
+  poly([[14,140],[40,142],[44,172],[10,170]],'#241c30');
+  poly([[17,144],[37,146],[40,168],[14,166]],'#e8ddb8');
+  px(19,150,16,2,'#8a7a9a');px(19,155,13,2,'#8a7a9a');px(19,160,15,2,'#b8562e');
+  PS=1;
+}
+
+function sceneStudio(t){
+  PS=1.5;
+  poly([[0,0],[320,0],[320,164],[0,164]],'#241a44');
+  // Rückwand als Trapez, Seitenwände kippen rein
+  poly([[42,16],[280,24],[280,128],[42,136]],'#4a3574');
+  poly([[42,16],[280,24],[280,29],[42,21]],'#654b92');
+  poly([[0,0],[42,16],[42,136],[0,158]],'#33235c');
+  poly([[280,24],[320,6],[320,160],[280,128]],'#3b2a64');
+  // Lambris + Sockelleiste — Wand zweigeteilt statt Flachfarbe
+  poly([[42,96],[280,90],[280,128],[42,136]],'#3b2862');
+  poly([[42,94],[280,88],[280,91],[42,97]],'#7a5aa6');
+  poly([[42,132],[280,124],[280,128],[42,136]],'#2a1c48');
+  // SCHUHE-AUS-Schild an der linken Wand (der Text redet davon)
+  poly([[8,56],[38,64],[36,84],[6,74]],'#241c30');
+  poly([[10,59],[36,66],[34,81],[8,72]],'#e8ddb8');
+  PS=1;
+  ctx.save();ctx.translate(18,93);ctx.rotate(0.12);
+  ctx.font='bold 8px ui-monospace,monospace';ctx.textBaseline='top';ctx.fillStyle='#5a3a2a';
+  ctx.fillText('SCHUHE',0,0);ctx.fillText('AUS!',5,10);ctx.restore();
+  PS=1.5;
+  // Krumme Wanduhr zwischen Fenster und Poster
+  poly([[136,32],[157,34],[156,53],[135,50]],'#161028');
+  poly([[138,34],[155,36],[154,51],[137,49]],'#e8ddb8');
+  px(145,40,2,6,'#3a2a24');px(146,42,4,2,'#3a2a24');
+  // Hakenbrett mit Handtüchern — warmes Orange als DOTT-Komplementärtupfer
+  poly([[118,60],[188,64],[188,68],[118,64]],'#5e3a26');
+  px(124,61,2,2,'#2a1c48');px(148,63,2,2,'#2a1c48');px(172,64,2,2,'#2a1c48');
+  poly([[124,66],[137,67],[135,90],[123,88]],'#d88a3c');
+  poly([[126,66],[129,67],[128,88],[125,87]],'#f0a85a');
+  poly([[150,67],[162,68],[161,92],[149,90]],'#c8703c');
+  poly([[168,68],[179,69],[178,88],[167,87]],'#d88a3c');
+  // Fenster, schief im Rahmen
+  poly([[54,30],[112,25],[112,82],[54,89]],'#1c1442');
+  poly([[58,34],[108,29],[108,78],[58,84]],'#0b0b24');
+  starsIn(t,60,106,30,80,190);moon(97,42,5);
+  poly([[81,31],[85,31],[85,82],[81,86]],'#1c1442');
+  poly([[58,55],[108,50],[108,54],[58,59]],'#1c1442');
+  // Anatomie-Poster (Lunge statt Skelett)
+  poly([[196,30],[248,37],[243,94],[192,86]],'#171036');
+  poly([[200,34],[244,41],[240,90],[196,82]],'#e8e0d0');
+  px(218,42,3,9,'#6a3a44');
+  poly([[210,48],[218,49],[217,66],[208,63]],'#8c4a56');
+  poly([[221,49],[229,50],[231,66],[221,66]],'#8c4a56');
+  PS=1;
+  ctx.save();ctx.translate(316,104);ctx.rotate(0.11);      // folgt der Poster-Kippung, mittig im weißen Feld
+  ctx.font='bold 8px ui-monospace,monospace';ctx.textBaseline='top';
+  ctx.fillStyle='#8a7a9a';ctx.textAlign='center';
+  ctx.fillText('DER ATEM',0,0);ctx.textAlign='left';ctx.restore();
+  PS=1.5;
+  // Regalbrett mit Gläsern
+  poly([[252,98],[294,103],[294,109],[252,103]],'#5e3a26');
+  px(257,88,10,11,'#bcd8d2');px(259,90,6,7,'#5fae7a');px(257,88,10,2,'#e0f0ea');
+  px(272,85,10,14,'#bcd8d2');px(274,88,6,9,'#c85a74');px(272,85,10,2,'#e0f0ea');
+  // Deckenlampe mit sichtbarer Quelle + zweistufigem Kegel
+  poly([[162,0],[178,0],[184,10],[156,10]],'#161028');
+  px(164,7,12,4,'#ffe9a8');
+  poly([[148,0],[192,0],[272,164],[92,164]],'rgba(255,210,130,0.13)');
+  poly([[158,0],[182,0],[238,164],[126,164]],'rgba(255,222,152,0.10)');
+  // Boden
+  poly([[0,158],[42,136],[280,128],[320,160],[320,200],[0,200]],'#6a3c24');
+  poly([[0,158],[42,136],[280,128],[320,160],[320,165],[0,163]],'#8a5232');
+  floorSeams(165,134,'rgba(28,12,6,0.45)');
+  // Lichtteich der Lampe auf dem Boden
+  poly([[112,166],[248,161],[276,197],[94,200]],'rgba(255,214,140,0.15)');
+  // Perspektiv-Teppich, mittig vor den Matten
+  rug(168,152,90,200,196);
+  // Matten (Parallelogramme)
+  poly([[104,168],[162,164],[182,197],[96,200]],'#3f7a6c');
+  poly([[104,168],[162,164],[164,168],[106,172]],'#5da291');
+  poly([[196,162],[250,159],[272,190],[208,194]],'#7a3d5c');
+  poly([[196,162],[250,159],[252,163],[198,166]],'#9c5a7c');
+  // Kerzen
+  [[14,120],[28,128],[292,122],[304,130]].forEach((c,i)=>{
+    px(c[0],c[1],5,15,'#e6dec8');
+    const fl=Math.sin(t/(85+i*27))>0?0:1;
+    px(c[0]+1,c[1]-5-fl,3,5+fl,'#ffb43c');px(c[0]+1,c[1]-6-fl,3,2,'#ffeaa0');
+    px(c[0]-6,c[1]-11,17,26,'rgba(255,170,60,0.06)');
+  });
+  px(0,160,320,40,'rgba(255,150,60,0.04)');
+  // Ausgezogene Schuhe unterm SCHUHE-AUS-Schild: Kevins Sneaker + ihre Boots
+  ctx.save();ctx.scale(PS,PS);
+  ctx.fillStyle='#12091e';
+  ctx.beginPath();ctx.ellipse(16,183,7,3,0.1,0,7);ctx.fill();
+  ctx.beginPath();ctx.ellipse(30,185,7,3,-0.1,0,7);ctx.fill();
+  ctx.fillStyle='#ececec';
+  ctx.beginPath();ctx.ellipse(16,182.4,6.2,2.5,0.1,0,7);ctx.fill();
+  ctx.beginPath();ctx.ellipse(30,184.4,6.2,2.5,-0.1,0,7);ctx.fill();
+  ctx.fillStyle='#12091e';
+  ctx.beginPath();ctx.ellipse(46,190,6.4,2.8,0.15,0,7);ctx.fill();
+  ctx.beginPath();ctx.ellipse(58,192,6.4,2.8,-0.05,0,7);ctx.fill();
+  ctx.fillStyle='#2c2c3e';
+  ctx.beginPath();ctx.ellipse(46,189.5,5.6,2.3,0.15,0,7);ctx.fill();
+  ctx.beginPath();ctx.ellipse(58,191.5,5.6,2.3,-0.05,0,7);ctx.fill();
+  ctx.restore();
+  PS=1;
+}
+
+function sceneStreet(t){
+  PS=1.5;
+  dgrad(0,0,320,104,['#080a20','#0c0f2c','#121538','#181c46','#1f2454']);
+  starsIn(t,0,320,0,92,160);
+  moon(302,42,5);
+  const hs=[[0,52,58],[58,40,44],[102,60,52],[162,34,50],[196,56,64],[252,44,48],[296,60,24]];
+  for(const[hx,hy,hw]of hs){
+    px(hx,hy,hw,104-hy,'#171232');px(hx,hy,hw,2,'#241d48');
+    for(let wy=hy+7;wy<100;wy+=13)for(let wx=hx+5;wx<hx+hw-6;wx+=12){
+      const on=((wx*7+wy*13)%5)<2;
+      px(wx,wy,5,7,on?'#e6c26a':'#141728');
+      if(on)px(wx-1,wy-1,7,9,'rgba(230,194,106,0.07)');
+    }
+  }
+  // Späti, leicht gekippt, mit Markise
+  poly([[26,58],[76,62],[74,106],[28,104]],'#1c1434');
+  poly([[30,66],[72,69],[71,95],[31,93]],'#ffdc8c');
+  poly([[30,66],[72,69],[72,73],[30,70]],'#fff2c4');
+  poly([[24,58],[78,62],[76,68],[26,64]],'#c8462e');
+  poly([[24,64],[78,68],[77,71],[25,67]],'#e8e0d0');
+  poly([[18,54],[84,58],[86,112],[16,110]],'rgba(255,210,120,0.10)');
+  // Spezi-Kiste vorm Späti
+  poly([[34,104],[56,105],[55,112],[33,111]],'#7a3a20');
+  px(36,101,3,4,'#5a2a1a');px(41,101,3,4,'#5a2a1a');px(46,102,3,4,'#5a2a1a');px(51,102,3,4,'#5a2a1a');
+  PS=1;
+  ctx.save();ctx.translate(76,90);ctx.rotate(0.055);       // mittig auf der Markise
+  ctx.font='bold 8px ui-monospace,monospace';ctx.textBaseline='top';
+  ctx.fillStyle='#7a1e14';ctx.textAlign='center';ctx.fillText('KIOSK',0,0);
+  ctx.textAlign='left';ctx.restore();
+  PS=1.5;
+  // Tram-Haltestelle rechts (kollidiert nicht mehr mit Lauren) — mit Abfahrtsanzeige
+  px(300,96,3,68,'#2a2d4e');px(299,99,1,62,'#3c405e');px(297,162,9,3,'#2a2d4e');
+  px(292,80,19,19,'#0f6b3c');px(294,82,15,15,'#12824a');
+  px(293,81,17,1,'#bfe8d0');px(293,97,17,1,'#0a4a2a');
+  px(288,104,27,12,'#0c1220');px(290,106,23,8,'#141e30');   // Abfahrtsanzeige
+  px(292,108,10,2,'#e8b23c');px(305,108,6,2,'#e8b23c');
+  px(292,111,13,2,'#e8b23c');px(307,111,4,2,'#e8b23c');
+  px(284,100,35,20,'rgba(232,178,60,0.06)');
+  PS=1;
+  ctx.font='bold 14px ui-monospace,monospace';ctx.textBaseline='top';
+  ctx.fillStyle='#ffffff';ctx.textAlign='center';ctx.fillText('H',452,125);
+  ctx.textAlign='left';
+  PS=1.5;
+  px(288,160,30,3,'rgba(20,14,40,0.5)');                   // Wartelinie am Boden
+  // Straße mit Fluchtpunkt-Fugen
+  dgrad(0,104,320,96,['#1c1c34','#18182c','#141424','#10101e']);
+  px(0,102,320,3,'#2a2848');px(0,140,320,2,'#302e52');
+  // Tram-Schienen — damit die Bahn nachher nicht schwebt
+  for(let x=4;x<320;x+=24)poly([[x,147],[x+14,146.5],[x+14,157],[x,157.5]],'#231d34');
+  poly([[0,145],[320,141],[320,143],[0,147]],'#4a4a70');
+  poly([[0,145],[320,141],[320,141.8],[0,145.8]],'#7a7aa2');
+  poly([[0,157],[320,153],[320,155],[0,159]],'#4a4a70');
+  poly([[0,157],[320,153],[320,153.8],[0,157.8]],'#7a7aa2');
+  for(let i=-10;i<340;i+=42){
+    const tx=200+(i-200)*0.6;
+    poly([[i,178],[i+20,178],[tx+16,162],[tx,162]],'rgba(70,68,110,0.30)');
+  }
+  // Laterne über der Wartestelle — die Hauptfigur steht im Licht
+  px(148,94,3,76,'#1c1836');px(146,168,7,3,'#1c1836');
+  px(141,92,16,4,'#2a2d3e');px(143,96,12,3,'#ffe9a8');
+  poly([[135,98],[165,98],[188,168],[112,168]],'rgba(255,224,150,0.10)');
+  poly([[118,160],[182,160],[196,178],[106,178]],'rgba(255,224,150,0.11)');
+  // Laterne, nicht ganz senkrecht
+  poly([[271,36],[275,36],[277,104],[273,104]],'#141026');
+  px(265,34,16,4,'#2a2d3e');px(267,38,12,3,'#ffe9a8');
+  poly([[258,40],[288,40],[300,110],[246,110]],'rgba(255,224,150,0.06)');
+  PS=1;
+}
+/* Kevins Schlafzimmer, 07:02 — hier kommt ihre Nachricht an */
+function sceneBed(t){
+  PS=1.5;
+  dgrad(0,0,320,150,['#8a7690','#9a8496','#ac96a0']);
+  // Fenster mit Morgenhimmel
+  poly([[200,24],[292,28],[290,102],[198,96]],'#5e4a62');
+  poly([[205,29],[287,33],[285,97],[203,91]],'#f0cba6');
+  poly([[205,29],[287,33],[286,52],[204,46]],'#f8e2c2');
+  ctx.save();ctx.scale(PS,PS);
+  ctx.fillStyle='rgba(255,236,190,0.85)';ctx.beginPath();ctx.arc(262,58,9,0,7);ctx.fill();
+  ctx.restore();
+  poly([[244,30],[248,30],[247,99],[243,98]],'#5e4a62');
+  // Lichtschräge aufs Bett
+  poly([[205,50],[287,54],[210,196],[60,196]],'rgba(255,220,170,0.13)');
+  // Boden
+  poly([[0,150],[320,154],[320,200],[0,200]],'#71625a');
+  // Bett
+  px(0,96,14,96,'#4e3826');px(0,96,14,4,'#66492f');
+  poly([[6,130],[212,138],[212,192],[6,188]],'#d8cfc0');
+  poly([[6,148],[206,156],[208,192],[6,188]],'#7a4a5e');   // Decke
+  poly([[6,148],[206,156],[206,161],[6,153]],'#94607a');
+  ctx.save();ctx.scale(PS,PS);
+  ctx.strokeStyle='#5e3648';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(40,168);ctx.quadraticCurveTo(80,163,120,169);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(70,180);ctx.quadraticCurveTo(120,175,170,181);ctx.stroke();
+  // Kevin schläft: Körper als Wulst unter der Decke, Kopf seitlich auf dem Kissen
+  const br2=Math.sin(t/1400);
+  ctx.fillStyle='#7a4a5e';                                  // atmender Körper-Wulst
+  ctx.beginPath();ctx.ellipse(120,160,55,12+br2*1.4,0.04,0,7);ctx.fill();
+  ctx.strokeStyle='#94607a';ctx.lineWidth=1.2;
+  ctx.beginPath();ctx.moveTo(70,153);ctx.quadraticCurveTo(120,146-br2*1.4,172,153);ctx.stroke();
+  ctx.fillStyle='#ece4d4';                                  // Kissen, weich, ohne harten Ring
+  ctx.beginPath();ctx.ellipse(44,140,21,9.5,0.06,0,7);ctx.fill();
+  ctx.fillStyle='#d6cdba';
+  ctx.beginPath();ctx.ellipse(44,144,19,4,0.06,0,7);ctx.fill();
+  ctx.fillStyle='#12091e';ctx.beginPath();ctx.arc(58,134,10.2,0,7);ctx.fill();
+  ctx.fillStyle='#e8c09a';ctx.beginPath();ctx.arc(58,134,9.3,0,7);ctx.fill();
+  ctx.fillStyle='#e2c268';                                  // blonde Büschel
+  ctx.beginPath();ctx.ellipse(52,128,7,4.6,-0.5,0,7);ctx.fill();
+  ctx.beginPath();ctx.ellipse(60,126,6,4,0.3,0,7);ctx.fill();
+  ctx.beginPath();ctx.ellipse(50,134,4,5,0.2,0,7);ctx.fill();
+  ctx.strokeStyle='#3a2a20';ctx.lineWidth=1.1;              // geschlossenes Auge, Nase, Mund
+  ctx.beginPath();ctx.moveTo(59,133);ctx.quadraticCurveTo(61.5,134.6,64,133.4);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(64.5,136);ctx.quadraticCurveTo(65.8,137.4,64.6,138.4);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(60,140.4);ctx.quadraticCurveTo(62,141.2,63.6,140.6);ctx.stroke();
+  // Schulter über der Bettdecke, Decke bis zum Kinn
+  ctx.fillStyle='#7a4a5e';
+  ctx.beginPath();ctx.moveTo(64,146);ctx.quadraticCurveTo(96,140,150,150);
+  ctx.lineTo(150,160);ctx.quadraticCurveTo(96,152,64,154);ctx.closePath();ctx.fill();
+  // zZz steigen auf
+  const zf=(t/1000)%3;
+  ctx.font='bold 7px ui-monospace,monospace';ctx.textBaseline='top';
+  ctx.globalAlpha=Math.max(0,1-zf/3);
+  ctx.fillStyle='#5e4a62';ctx.fillText('z',76,120-zf*7);
+  ctx.font='bold 9px ui-monospace,monospace';ctx.fillText('Z',82,112-zf*7);
+  ctx.globalAlpha=1;
+  ctx.fillStyle='#16161e';ctx.beginPath();ctx.arc(7,100,6,0,7);ctx.fill();   // Cap am Pfosten
+  ctx.restore();
+  // Nachttisch + leuchtendes Handy
+  px(224,146,42,46,'#5e4634');px(224,146,42,4,'#77593f');px(228,166,34,3,'#4a3628');
+  const gl=0.5+0.5*Math.sin(t/300);
+  px(234,132,18,10,'#0e1a2c');px(236,134,14,6,'#9ad8f0');
+  px(226,122,34,26,`rgba(154,216,240,${0.10+gl*0.10})`);
+  PS=1;
+}
+const SCENE={front:sceneFront,studio:sceneStudio,street:sceneStreet};
+
+/* ================= Text à la Monkey Island ================= */
+function wrapT(s,max){const o=[];let l='';for(const w of s.split(' ')){if((l+w).length>max){o.push(l.trim());l='';}l+=w+' ';}if(l.trim())o.push(l.trim());return o;}
+function drawSay(txt,col,yTop,ax){
+  if(!txt)return;
+  PS=1;
+  ctx.font='bold 13px ui-monospace,"Courier New",monospace';ctx.textBaseline='top';
+  const cx0=(ax===undefined)?W/2:ax;
+  let y=yTop;
+  for(const ln of wrapT(txt,42)){
+    const w=ctx.measureText(ln).width;
+    const x=Math.round(Math.max(6,Math.min(W-6-w,cx0-w/2)));   // über dem Sprecher, im Bild gehalten
+    ctx.fillStyle='#000';
+    for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++)if(a||b)ctx.fillText(ln,x+a,y+b);
+    ctx.fillStyle=col;ctx.fillText(ln,x,y);
+    y+=15;
+  }
+}
+
+/* ================= State ================= */
+const S={scene:'front',full:'',shown:0,typing:false,pause:0,col:'#fff',
+         mode:'talk',cringe:0,sym:0,breath:.5,pose:'stand',jonas:false,
+         run:null,fails:0,waves:0,pending:null,pendingHint:'',
+         mood:'neutral',moodStart:0,moodT:0,tram:null,gone:false,
+         who:'n',autoNext:null,autoT:0,_lx:0,_kx:0};
+
+/* Reaktion = Körpersprache. Keine Anzeige, keine Zahlen. */
+const MOOD_OF={good:'laugh',ok:'neutral',meh:'scratch',bad:'roll'};
+function react(kind){
+  S.mood=MOOD_OF[kind]||'neutral';
+  S.moodStart=performance.now();
+  S.moodT=S.moodStart+1e9;                     // bleibt bis zum nächsten Beat sichtbar
+}
+
+/* Bewusst keine Anzeige: was sie denkt, steht in ihrem Gesicht. */
+function stats(){ $sline.innerHTML=''; }
+function flushOpts(){
+  $hint.textContent=S.pendingHint||'Wähle';
+  $ch.innerHTML='';
+  (S.pending||[]).forEach((o,i)=>{
+    const li=document.createElement('li');
+    li.textContent=(S.pending.length>1?(i+1)+'. ':'')+o.t;
+    li.onclick=()=>{
+      audioInit();
+      // Monkey-Island-Echo: gesprochene Antworten sagt Kevin erst selbst (blau, über ihm)
+      if(S.mode==='talk'&&/^[»"]/.test(o.t)){
+        line('k',o.t.replace(/^[»"\s]+|["«\s]+$/g,''));
+        opts([],'…');
+        S.autoNext=o.go;
+        return;
+      }
+      o.go();
+    };
+    $ch.appendChild(li);
+  });
+  stats();
+}
+function opts(list,hint){
+  S.pending=list;S.pendingHint=hint;
+  if(S.typing){$ch.innerHTML='';$hint.textContent='…';stats();}
+  else flushOpts();
+}
+function line(who,txt){
+  S.who=who;
+  S.full=(who==='l'?'Lauren: ':who==='j'?'Jonas: ':who==='k'?'Kevin: ':'')+txt;
+  S.col=who==='l'?'#f0b8c8':who==='j'?'#e0c27a':who==='k'?'#9ac0f0':'#b8b8cc';
+  S.shown=0;S.typing=true;S.pause=0;
+}
+function beat(who,txt,list,hint){S.mood='neutral';S.moodT=0;line(who,txt);opts(list,hint);}
+function reply(who,txt,next){line(who,txt);opts([{t:'…',go:next}],'Weiter');}
+function skipTyping(){
+  if(S.typing){S.shown=S.full.length;S.typing=false;flushOpts();
+    if(S.autoNext)S.autoT=performance.now()+260;
+    return true;}
+  return false;
+}
+
+/* ================= AKT 1 — Smalltalk ================= */
+const RAW=[
+ {sc:'front',who:'l',txt:'"Du bist Kevin, non? Von dem Profil mit dem Fahrradhelm. Isch bin Lauren."',hint:'Vor dem Studio, ein Novemberabend, zehn vor acht',o:[
+   ['"Der Helm war ein Statement."',1,0,'l','"Über was?" — "Über Sicherheit." — "Mon dieu. Das ist so unsexy, dass es fast wieder geht."'],
+   ['"Ja. Und du hattest das Gedicht im Profil."',2,0,'l','"Du hast es gelesen! Niemand liest die Prompts. Niemand. Warte — hatte isch eine Frage gestellt? Egal."'],
+   ['"Nein."',1,1,'l','Sie schaut dich drei Sekunden an. "Doch. Isch spüre dein Feld. Es ist ein Kevin-Feld."'],
+   ['"Ich bin\'s. Und du bist Lauren, vom Profil mit dem, äh, Profil."',0,2,'l','"Ja. Isch habe eins. Das ist Voraussetzung bei der App."']
+ ]},
+ {sc:'front',who:'n',txt:'Drinnen läuft schon Musik. Sie kramt in der Jacke und holt einen Proteinriegel raus.',hint:'Noch draußen, keiner will reingehen',o:[
+   ['"Isst du den jetzt? Vor dem Atmen?"',2,0,'l','"Danach kann isch nicht essen, da bin isch zu weit weg. Cookie Dough. Willst du die Hälfte?"'],
+   ['"Sollen wir? Oder noch kurz stehen bleiben?"',2,0,'l','"Noch kurz stehen bleiben." Sie sagt es sofort, ohne nachzudenken. Ihr steht noch zwei Minuten.'],
+   ['Du hältst ihr die Tür auf, bevor sie fertig gekaut hat.',1,1,'l','Sie geht rein, mit vollem Mund, und schaut dich dabei vorwurfsvoll an.'],
+   ['"Ich hab gehört, hier drin muss man barfuß."',0,2,'l','"Ehm. Ja. Es ist ein Yogastudio." Sie schaut kurz die Straße runter.']
+ ]},
+ {sc:'studio',who:'n',txt:'Drinnen. SCHUHE AUS steht an der Wand. Sie steckt den Riegelrest weg und ist schon raus aus ihren Schuhen. Deine Cap bleibt auf. Niemand sagt etwas. Alle denken es.',hint:'Die Socken-Frage',o:[
+   ['"Ich hab extra Socken ohne Löcher angezogen."',1,0,'l','"Extra für misch?" — "Für den Raum." — "Für den Raum. Bien sûr."'],
+   ['Ein Loch ist da. Sie sieht es.',1,1,'l','"Das ist ein Fenster", sagt sie. "Damit der Zeh was sieht." Pause. "Das war ein Vers, den nehm isch mit."'],
+   ['"Ich bin barfuß eigentlich ein anderer Mensch."',2,0,'l','"Zeig mir den Menschen."'],
+   ['"Riechst du das auch?"',0,3,'l','"Oui."']
+ ]},
+ {sc:'studio',who:'l',txt:'"Und was machst du? Nicht beruflich. Isch meine, was machst du wirklisch."',hint:'Die Frage, auf die alles ankommt',o:[
+   ['"Mein Nervensystem und ich reden gerade nicht miteinander."',2,0,'l','"Seit wann?" — "2019." — "Dann ist das hier eine Paartherapie. Isch bin die Therapeutin, der Raum ist der Anwalt."'],
+   ['"Ich denke über Fernsehen nach, das es noch nicht gibt."',2,0,'l','"Oh! Das ist auch Dichtung. Nur mit Budget." Sie sagt Budget wie ein Schimpfwort.'],
+   ['"Ich hab gelesen, man kann dabei weinen. Ich wollte das mal testen."',1,1,'l','"Du machst Breathwork als Produkttest." — "Ich arbeite beim Fernsehen." — "Das erklärt viel."'],
+   ['"Portfolio Manager."',0,2,'l','"Ehm." Lange Pause. "Und das Wirklische?"']
+ ]},
+ {sc:'studio',who:'n',jon:1,txt:'Ein Mann mit Dutt, Stirnband und der Ruhe eines Möbelstücks kommt aus dem Hinterzimmer.',hint:'Der Kursleiter erscheint',o:[
+   ['Du nickst ihm zu.',0,0,'j','"Namaste. Isch— äh. ICH bin Jonas." Er hat kurz ihren Akzent gespiegelt. Es war ein Versehen. Lauren hat es gehört.'],
+   ['"Sind Sie der mit dem Atem?"',1,0,'j','"Ich bin Jonas. Und ja — ich bin der mit dem Atem. Alle hier haben einen, aber meiner ist versichert."'],
+   ['Du schaust demonstrativ auf seine Zehensocken.',1,1,'j','"Die sind orthopädisch", sagt er, bevor du etwas sagen kannst. "Ich bin übrigens Jonas."'],
+   ['"Wir wollten gerade gehen."',0,2,'j','"Das sagen alle vor der ersten Welle. Ich bin Jonas. Nach der dritten will keiner mehr weg."']
+ ]},
+ {sc:'studio',who:'j',txt:'"Schön, dass ihr da seid. Ihr zwei kennt euch schon länger?"',hint:'Jonas mischt sich ein',o:[
+   ['"Seit vier Minuten."',2,0,'l','"Fünf. Er war zu früh. Isch mag das, das ist selten."'],
+   ['"Das ist ein Date, Jonas."',2,1,'j','"Wunderschön. Dann atmen wir das jetzt zusammen." Lauren schaut sehr interessiert auf ihre Sockenspitzen.'],
+   ['"Wir sind Kollegen." (Ihr seid keine Kollegen.)',0,2,'l','"Wir arbeiten beide", sagt Lauren. "Nur nicht zusammen. Und nicht am Gleichen. Und nicht —" Sie hört selbst auf.'],
+   ['"Definiere kennen."',0,3,'n','Jonas nimmt die Frage ernst. Er redet neunzig Sekunden. Niemand rettet dich. Lauren isst ihren Riegel zu Ende.']
+ ]}
+];
+
+function rk(kind){SFX[kind]();react(kind);}
+function feedback(sym,cringe){
+  const kind = cringe>=2?'bad' : cringe===1?'meh' : sym>=2?'good' : 'ok';
+  SFX[kind]();react(kind);
+  return kind;
+}
+
+let ti=0;
+function talkBeat(){
+  if(ti>=RAW.length)return preGauntlet();
+  const b=RAW[ti];
+  S.scene=b.sc;S.pose='stand';S.jonas=(b.who==='j'||!!b.jon);
+  S.riegel=(b.sc==='front'&&ti>=1);            // ab dem Riegel-Beat isst sie sichtbar
+  beat(b.who,b.txt,b.o.map(o=>({t:o[0],go:()=>{
+    S.sym+=o[1];S.cringe+=o[2];
+    feedback(o[1],o[2]);
+    line(o[3],o[4]);
+    opts([{t:'…',go:()=>{ti++;SFX.page();talkBeat();}}],'Weiter');
+  }})),b.hint);
+}
+
+function preGauntlet(){
+  S.jonas=true;S.scene='studio';S.pose='sit';   // Text sagt sitzen → Bild zeigt sitzen
+  if(S.cringe>=7&&!S.cringeWarned){             // kein Game Over mehr — nur ein Dämpfer
+    S.cringeWarned=true;SFX.bad();react('roll');
+    return beat('l','Sie legt ihre Matte demonstrativ einen halben Meter weiter weg. "Isch brauche Raum. Du bist anstrengend. Interessant-anstrengend. Aber anstrengend."',[
+      {t:'…',go:preGauntlet}
+    ],'Gerade nochmal gutgegangen — das Date läuft weiter');
+  }
+  beat('l','"Setz disch." Sie klopft auf die Matte neben ihrer. "Und wenn du gleisch ohnmächtig wirst — isch fang disch nisch auf. Isch bin dann selber weg."',[
+    {t:'"Abgemacht. Ich falle nach rechts."',go:()=>{S.sym++;rk('good');introGauntlet();}},
+    {t:'"Wenn ich falle, dann mit Stil."',go:()=>{S.sym++;rk('good');introGauntlet();}},
+    {t:'"Ist das hier auch Energiearbeit?"',go:()=>{S.sym++;rk('ok');reply('l','"Alles ist Energiearbeit. Auch die Tram. Die Tram besonders."',introGauntlet);}},
+    {t:'Du sagst nichts und schließt die Augen.',go:introGauntlet}
+  ],'Gleich geht es los');
+}
+
+
+/* ================= AKT 2 — Atem-Gauntlet ================= */
+const WAVES=[
+  {name:'Welle 1 — Ankommen',  band:42,speed:0.00050,need:140,drain:0.24,rise:0.85,fall:0.70},
+  {name:'Welle 2 — Feueratem', band:22,speed:0.00105,need:185,drain:0.55,rise:1.05,fall:0.95},
+  {name:'Welle 3 — Loslassen', band:19,speed:0.00150,need:210,drain:0.62,rise:1.30,fall:1.20}
+];
+const NW=WAVES.length;
+const CHATTER=[
+  'Jonas: "Nicht kontrollieren. Nur beobachten." Lauren atmet dir gegenüber. Sie ist erschreckend gut darin.',
+  'Deine Hände kribbeln. Lauren flüstert: "Das sind die Ahnen." Du hoffst, es ist nur Kohlendioxid.'
+];
+
+function introGauntlet(){
+  S.pose='sit';
+  line('j','"Wir atmen in drei Wellen. Haltet den Atem im Fenster. Das Fenster wandert."');
+  opts([
+    {t:'Anfangen.',go:()=>startWave(0)},
+    {t:'Atmen überspringen.',go:skipGauntlet}
+  ],BREATH_HINT);
+}
+function skipGauntlet(){
+  S.mode='talk';S.run=null;S.pose='sit';breathStop();SFX.meh();
+  S.breathRe='skip';
+  line('n','Du atmest irgendwie mit und denkst dabei an deine Mails. Es ist okay. Es ist nur nicht das, wofür der Kurs gedacht war.');
+  opts([{t:'Danach rausgehen.',go:leaveStudio}],'Übersprungen  ·  keine Wellen');
+}
+/* Übergang: Studio → Straße, damit Jonas nicht einfach aus dem Spiel fällt */
+function leaveStudio(){
+  S.mode='talk';
+  line('n','Schuhe wieder an, ein Nicken zu Jonas — "Bis nächste Woche. Oder bis gleich, das entscheidet euer Nervensystem." Draußen ist die Nacht kühl geworden.');
+  opts([{t:'Raus in die Nacht.',go:walkScene}],'Ihr verlasst das Studio');
+}
+function startWave(i){
+  const w=WAVES[i];S.mode='play';S.pose='sit';
+  S.run={wave:i,v:50,center:50,focus:w.need*0.55,hold:false,t0:performance.now(),
+         band:w.band,speed:w.speed,need:w.need,drain:w.drain,rise:w.rise,fall:w.fall,inband:false};
+  line('n',w.name);S.col='#ffe066';
+  breathStart();SFX.start();
+  opts([{t:'Atmen überspringen.',go:skipGauntlet}],BREATH_HINT);
+}
+function waveWon(){
+  const i=S.run.wave;S.mode='talk';S.waves=Math.max(S.waves,i+1);
+  breathStop();SFX.win();
+  if(i+1<NW){
+    line('n',CHATTER[i]);
+    opts([{t:'Weiteratmen.',go:()=>startWave(i+1)}],`Welle ${i+1} von ${NW} geschafft`);
+  }else{
+    S.sym+=4;
+    S.breathRe=S.fails?'fought':'pure';
+    line('n','Es wird still. Irgendwann sagt Jonas: "Kommt langsam zurück." Deine Hände sind warm. Lauren sitzt neben dir und grinst Löcher in die Decke.');
+    S.col='#ffe066';
+    opts([{t:'Zurückkommen.',go:leaveStudio}],'Alle drei Wellen geschafft');
+  }
+}
+function waveLost(){
+  S.mode='talk';S.fails++;breathStop();SFX.lose();
+  const i=S.run.wave;
+  const jokes=[
+    'Du hyperventilierst wie ein defekter Kühlschrank. Jonas schaut kurz besorgt.',
+    'Du atmest jetzt einfach nur noch. Ohne Konzept.',
+    'Irgendwo im Raum sagt jemand "schhhh". Es könntest du gewesen sein.',
+    'Lauren, ohne die Augen zu öffnen: "Atme, nicht arbeite."'
+  ];
+  line('n',jokes[Math.min(jokes.length-1,S.fails-1)]+' Jonas: "Kein Problem. Nochmal."');
+  S.col='#ff9a7a';
+  opts([
+    {t:`Nochmal bei ${WAVES[i].name}.`,go:()=>startWave(i)},
+    {t:'Atmen überspringen.',go:skipGauntlet}
+  ],`Verloren bei ${WAVES[i].name}  ·  Versuch ${S.fails+1}`);
+}
+
+/* Eingabe */
+const down=e=>{
+  audioInit();
+  if(S.mode==='title'){S.mode='talk';SFX.page();talkBeat();if(e&&e.cancelable)e.preventDefault();return;}
+  if(S.mode==='tram'&&S.tram&&!S.tram.done){
+    // Skip springt zur ABFAHRT, nicht ans Ende — Einfahren + Einsteigen bleiben immer sichtbar
+    if(performance.now()-S.tram.t0>1200)S.tram.t0=Math.min(S.tram.t0,performance.now()-6600);
+    if(e&&e.cancelable)e.preventDefault();return;}
+  if(S.mode==='play'&&S.run){S.run.hold=true;skipTyping();if(e&&e.cancelable)e.preventDefault();return;}
+  if(skipTyping()){if(e&&e.cancelable)e.preventDefault();return;}
+  if(e&&e.cancelable)e.preventDefault();
+};
+const up=()=>{if(S.run)S.run.hold=false;};
+cv.addEventListener('pointerdown',down);
+addEventListener('pointerup',up);
+addEventListener('pointercancel',up);
+addEventListener('keydown',e=>{
+  if(e.code==='Space'){e.preventDefault();if(!e.repeat)down(e);return;}
+  const n=parseInt(e.key,10);
+  if(n>=1&&n<=9){const li=$ch.children[n-1];if(li)li.click();}
+});
+addEventListener('keyup',e=>{if(e.code==='Space')up();});
+
+/* ================= AKT 3 — Spezi ================= */
+function walkScene(){
+  S.scene='street';S.pose='stand';S.jonas=false;S.mode='talk';S.teary=true;
+  const br=S.breathRe;
+  if(br==='pure'){
+    return beat('l','"Du warst ganz weg da drin, non? Isch hab kurz rübergeguckt. Du hast geleuchtet wie ein Toaster."',[
+      {t:'"Du solltest bei deiner eigenen Atmung bleiben."',go:()=>{S.sym+=2;rk('good');reply('l','"Isch war bei meiner. Deine war nur lauter. Auf die gute Art."',walkSpaeti);}},
+      {t:'"Ich hab nichts mitbekommen. Nicht mal dich."',go:()=>{S.sym+=2;rk('good');walkSpaeti();}},
+      {t:'"Toaster leuchten nicht."',go:()=>{S.sym+=1;rk('ok');reply('l','"Meiner schon. Isch hab ihn kaputt gemacht. Langes Gedicht."',walkSpaeti);}}
+    ],'Sie hat dich beobachtet');
+  }
+  if(br==='fought'){
+    return beat('l','"Du hast da drin gekämpft. Mit dir selber. Isch mag Leute, die nochmal von vorn anfangen."',[
+      {t:'"Ich hab mehrmals verloren."',go:()=>{S.sym+=2;rk('good');reply('l','"Isch weiß. Isch hab mitgezählt. Es war das Beste am ganzen Kurs."',walkSpaeti);}},
+      {t:'"Der Atem hat angefangen."',go:()=>{S.sym+=1;rk('ok');walkSpaeti();}}
+    ],'Sie hat mitgezählt');
+  }
+  if(br==='skip'){
+    return beat('l','"Du hast an deine Mails gedacht." Pause. "Isch hab es gespürt. Dein Feld war im Büro."',[
+      {t:'"Nur an eine. Eine sehr laute Mail."',go:()=>{S.cringe++;rk('meh');walkSpaeti();}},
+      {t:'"Stimmt. Tut mir leid."',go:()=>{S.sym+=1;rk('ok');reply('l','"Beim nächsten Mal bleibst du. Falls es ein nächstes Mal gibt." Sie lässt den Satz absichtlich offen.',walkSpaeti);}}
+    ],'Sie hat es gemerkt');
+  }
+  walkSpaeti();
+}
+function walkSpaeti(){
+  S.scene='street';S.pose='stand';S.jonas=false;S.mode='talk';S.teary=true;
+  beat('l','Sie nickt Richtung Kiosk-Licht. "Isch brauche jetzt Zucker. Der Riegel war Pappe. Spezi?"',[
+    {t:'"Spezi. Aber die richtige, nicht die mit Kirschgeschmack."',go:()=>{S.sym+=2;rk('good');S.bottle=true;walk2();}},
+    {t:'"Zwei. Ich zahl."',go:()=>{S.sym+=1;rk('ok');S.bottle=true;reply('l','"Oh. Ein Mann, der am Kiosk groß aufspielt." Sie meint es zur Hälfte spöttisch. Die andere Hälfte nimmt die Spezi.',walk2);}},
+    {t:'"Du hattest doch gerade erst einen Riegel."',go:()=>{S.sym+=2;rk('good');S.bottle=true;reply('l','"Das war vor dem Atmen. Isch bin jetzt ein anderer Mensch. Der Mensch will Spezi."',walk2);}},
+    {t:'"Ich trinke eigentlich keinen Zucker mehr." (Du trinkst Zucker.)',go:()=>{S.cringe++;rk('meh');S.bottle=true;reply('l','"Ehm. Du hältst gerade eine Spezi." — "Die ist für dich." — "Isch habe schon eine." Es entsteht eine Stille mit zwei Flaschen.',walk2);}}
+  ],'Nach dem Kurs, am Kiosk');
+}
+function walk2(){
+  S.bottle=true;                               // ab hier: gekauft, beide haben eine
+  const played=S.waves>0;                      // SIE weint immer — sie war wirklich drin; nur DEINE Bezüge hängen am Skip
+  S.teary=true;
+  const txt=played
+    ?'Ihr kommt aus dem Kiosk, jeder mit einer Flasche. Sie ist immer noch etwas verheult — beim Atmen hat es sie erwischt, irgendwo zwischen Welle zwei und drei. Sie tut nicht so, als wäre nichts.'
+    :'Ihr kommt aus dem Kiosk, jeder mit einer Flasche. Sie ist etwas verheult — sie war wirklich da drin. Du warst die meiste Zeit im Büro, in deinem Kopf.';
+  const os=[
+    played?{t:'"Ich hab da drin an meinen Vater gedacht."',go:()=>{S.sym+=3;rk('good');reply('l','Sie bleibt kurz stehen und schaut auf ihre Flasche. "Isch auch. Nisch an deinen. An meinen." Pause. "Deshalb geh isch da hin. Man weint da für zwölf Euro fuffzig, das ist billiger als alles andere in dieser Stadt."',walk3);}}
+          :{t:'"Du hast da drin geweint. Ich hab nur zugeschaut."',go:()=>{S.sym+=2;rk('ok');reply('l','"Du hast nisch zugeschaut. Du warst im Büro, in deinem Kopf. Aber du bist geblieben. Das zählt halb."',walk3);}},
+    {t:'"Sag mir ein Gedicht. Irgendeins. Deins."',go:()=>{S.sym+=3;rk('good');reply('l','Sie sagt vier Zeilen auf Französisch. Du verstehst zwei Wörter. Eins davon ist Spezi. Sie hat es reingeschmuggelt.',walk3);}}
+  ];
+  if(S.breathRe!=='skip')os.push({t:'"Ich glaub, ich hab beim Atmen kurz geschlafen."',go:()=>{S.sym+=2;rk('good');reply('l','"Das war kein Schlaf. Das war Trance." — "Ich hab geschnarcht." — "Trance mit Ton."',walk3);}});
+  os.push({t:'"War das jetzt eigentlich ein gutes Date?"',go:()=>{S.sym+=1;rk('ok');reply('l','"Frag misch das nisch mittendrin. Das ist wie den Kuchen aufmachen, während er backt."',walk3);}});
+  beat('n',txt,os,'Auf dem Weg zur Haltestelle');
+}
+function walk3(){
+  beat('n','An der Kreuzung bleibt sie stehen. Ihre Tram kommt in zwei Minuten. Sie schaut dich an und sagt nichts.',[
+    {t:'Du entscheidest dich.',go:decision}
+  ],'Der Moment');
+}
+
+/* ================= Ende ================= */
+function decision(){
+  beat('n','Zwei Minuten. Die Anzeige zählt runter. Irgendwas musst du jetzt wollen.',[
+    {t:'» Ich will sie wiedersehen. «',go:()=>revealStep(1)},
+    {t:'Ich lass es. War ein netter Abend.',go:noThanks}
+  ],'Deine Entscheidung');
+}
+function noThanks(){
+  SFX.endBad();react('scratch');
+  line('l','"Okay." Pause. "Isch hätte jetzt was anderes gesagt. Aber okay."');
+  S.col='#f0b8c8';
+  opts([{t:'…',go:()=>{
+    line('n','Du sagst nichts mehr. Sie auch nicht. Ihr wartet zusammen auf ihre Tram, und das ist plötzlich sehr lang.');
+    opts([{t:'Warten.',go:()=>startTram({yes:false,after:
+      '"Mach\'s gut, Kevin." Sie steigt ein, ohne sich nochmal umzudrehen. Du hast es gewusst, in der Sekunde, in der du es nicht gesagt hast.'})}],'Weiter');
+  }}],'Weiter');
+}
+
+/* Beide sagen es laut — kein Overlay, keine Punkte. */
+function revealStep(n){
+  if(n===1){
+    tone(523.25,0.9,'sine',0.06);
+    line('n','Du sagst es. Es kommt schneller raus als geplant und ungefähr halb so elegant.');
+    S.col='#ffe066';
+    return opts([{t:'…',go:()=>revealStep(2)}],'Gesagt ist gesagt');
+  }
+  const score=S.sym-S.cringe*1.6+S.waves*1.4;
+  if(score>=14){
+    SFX.end();react('laugh');S.phoneHand=true;
+    line('l','"Warte." Sie dreht dir ihr Handy hin. Da steht schon eine getippte, noch nicht abgeschickte Nachricht: "Samstag?" — "Isch wollte nur nisch die Erste sein."');
+    opts([{t:'"Samstag."',go:()=>{rk('good');line('l','"Samstag. Isch bring die Riegel, du bringst die Spezi. Und den Helm."');
+      opts([{t:'…',go:()=>startTram({yes:true,msg:'Samstag? — habe es endlisch abgeschickt. Riegel: isch. Spezi und Helm: du. ✦',after:'Sie winkt durch die Scheibe, mit beiden Händen, wie ein Kind. Lesen wirst du ihre Nachricht erst am Morgen.'})}],'Ihre Tram kommt');}}],'Sie hatte es schon getippt');
+  }else if(score>=8){
+    SFX.end();react('laugh');
+    line('l','"Ja." Sie sagt es sofort, ohne die Pause, die du erwartet hast. "Aber diesmal ohne Jonas."');
+    opts([{t:'"Ohne Jonas."',go:()=>{rk('good');line('l','"Bien. Isch schreib dir morgen. Wirklisch morgen, nicht Sonntag."');
+      opts([{t:'…',go:()=>startTram({yes:true,msg:'Guten Morgen. Ja, isch meinte es ernst. Ohne Jonas.',after:'Sie schreibt tatsächlich am nächsten Morgen. Um sieben. Du schläfst noch.'})}],'Ihre Tram kommt');}}],'Sie sagt ja');
+  }else if(score>=4){
+    SFX.ok();react('scratch');
+    line('l','"Ehm." Sie überlegt wirklich, das sieht man. "Isch weiß es noch nisch. Aber isch weiß auch nisch Nein. Das ist besser als es klingt, glaub mir."');
+    opts([{t:'"Das nehm ich."',go:()=>{rk('ok');line('l','"Gut. Dann lass isch disch das nehmen." Sie kramt in der Jacke und drückt dir einen halben Proteinriegel in die Hand. "Anzahlung."');
+      opts([{t:'…',go:()=>startTram({yes:true,msg:'Okay: Ja. Frag misch nisch, warum isch grinse.',card:'ZWEI MORGEN SPÄTER',after:'Zwei Tage lang nichts. Dann, am dritten Morgen, ohne Anlass: Sie kommt.'})}],'Ihre Tram kommt');}}],'Sie zögert ehrlich');
+  }else{
+    SFX.endBad();react('roll');
+    line('l','"Kevin." Sie sagt deinen Namen so, wie man einen Satz beendet. "Du bist lieb. Aber isch will das nisch nochmal, glaub isch."');
+    opts([{t:'"Okay."',go:()=>{line('l','"Okay." Sie nickt einmal. Dann, fast versöhnlich: "Den Vers mit dem Zeh und dem Fenster behalte isch trotzdem. Der kommt in ein Gedicht. Du wirst nisch erwähnt."');
+      opts([{t:'…',go:()=>startTram({yes:false,after:'Sie steigt ein. Durch die Scheibe schaut sie noch kurz auf ihr Handy, nicht zu dir. Es ist nicht böse gemeint. Es ist nur zu Ende.'})}],'Ihre Tram kommt');}}],'Sie sagt es klar');
+  }
+}
+
+/* ---- Die Tram fährt ein, sie steigt ein, die Tram fährt weg ---- */
+function startTram(cfg){
+  S.mode='tram';S.tram={t0:performance.now(),cfg,done:false};S.phoneHand=false;
+  line('n','Die Tram kommt um die Kurve.');
+  S.col='#dcdce8';
+  opts([],'…  ('+(TOUCH?'Tipp':'Klick')+' ins Bild überspringt)');
+  tone(220,1.4,'sawtooth',0.035,0,180);
+}
+function tramDone(){
+  const cfg=S.tram.cfg;
+  S.mode='end';
+  cfg.yes?SFX.end():SFX.endBad();
+  if(cfg.msg){
+    S.phone={t0:performance.now(),msg:cfg.msg,card:cfg.card||'AM NÄCHSTEN MORGEN'};
+    tone(1568,0.12,'sine',0.055,1.1);tone(2093,0.35,'sine',0.05,1.22);   // Nachrichten-Ding
+  }
+  line('n',cfg.after);
+  S.col=cfg.yes?'#ffe066':'#ff9a7a';
+  opts([{t:'Nochmal. Anderer Abend.',go:reset}],cfg.yes?'Ihr seht euch wieder':'Ihr seht euch nicht wieder');
+}
+
+/* Tram in 320er-Koordinaten */
+function drawTram(x,doorOpen,t){
+  PS=1.5;
+  px(x,88,150,10,'#1a2030');                       // Dach
+  px(x,96,150,46,'#dfe3ea');                       // Wagenkasten
+  px(x,96,150,3,'#ffffff');
+  px(x,120,150,4,'#1f5fbf');                       // blaues Band
+  px(x,136,150,6,'#9aa2b0');
+  px(x+2,102,32,16,'#0d1420');                     // Fenster
+  px(x+38,102,30,16,'#0d1420');
+  px(x+96,102,30,16,'#0d1420');
+  px(x+130,102,18,16,'#0d1420');
+  px(x+2,102,32,2,'rgba(255,255,255,0.16)');
+  px(x+38,102,30,2,'rgba(255,255,255,0.16)');
+  // warmes Innenlicht
+  px(x+2,104,32,12,'rgba(255,220,150,0.20)');
+  px(x+38,104,30,12,'rgba(255,220,150,0.20)');
+  px(x+96,104,30,12,'rgba(255,220,150,0.20)');
+  // Tür
+  px(x+70,98,26,42,doorOpen?'#101624':'#c2c8d2');
+  if(!doorOpen){px(x+82,98,2,42,'#8f97a4');px(x+72,102,20,14,'#0d1420');}
+  // Front
+  px(x+144,96,6,46,'#c8ccd4');
+  px(x+146,132,4,4,'#ffe9a8');                     // Scheinwerfer
+  px(x-2,132,4,4,'#c8462e');                       // Rücklicht
+  px(x+140,88,10,4,'#1a2030');
+  // Räder
+  px(x+18,140,14,5,'#141822');px(x+112,140,14,5,'#141822');
+  // Licht auf der Straße
+  px(x,144,150,10,'rgba(255,230,180,0.05)');
+  PS=1;
+}
+
+function reset(){
+  S.scene='front';S.cringe=0;S.sym=0;S.fails=0;S.waves=0;S.jonas=false;
+  S.pose='stand';S.mode='talk';S.run=null;ti=0;breathStop();
+  S.tram=null;S.gone=false;S.mood='neutral';S.moodT=0;S.moodStart=0;
+  S.breathRe=null;S.riegel=false;S.bottle=false;S.teary=false;
+  S.cringeWarned=false;S.phone=null;S.autoNext=null;S.autoT=0;S.who='n';S.phoneHand=false;
+  S.mode='title';S.full='';S.typing=false;
+  opts([],'Ein Abend in München — '+(TOUCH?'tipp':'klick')+' ins Bild');
+}
+
+/* ================= Render ================= */
+let last=0,blipCount=0;
+function frame(t){
+  const dt=Math.min(60,t-last)/1000;last=t;
+
+  // Schreibmaschine
+  if(S.typing){
+    if(S.pause>0)S.pause-=dt;
+    else{
+      const before=Math.floor(S.shown);
+      S.shown+=dt*52;
+      const now=Math.min(S.full.length,Math.floor(S.shown));
+      for(let i=before;i<now;i++){
+        const chr=S.full[i];
+        if(chr==='.'||chr==='?'||chr==='!')S.pause=0.20;
+        else if(chr===','||chr===';'||chr==='—')S.pause=0.09;
+        if(/[a-zA-ZäöüÄÖÜ]/.test(chr)&&(++blipCount%3===0))SFX.blip();
+      }
+      if(S.shown>=S.full.length){S.shown=S.full.length;S.typing=false;flushOpts();
+        if(S.autoNext)S.autoT=t+620;}
+    }
+  }
+  // Auto-Weiter nach Kevins Echo — Lauren antwortet ohne Extra-Klick
+  if(S.autoT&&t>S.autoT){const f=S.autoNext;S.autoNext=null;S.autoT=0;if(f)f();}
+
+  // Zeitsprung: mit ihrer Nachricht schneiden wir in Kevins Schlafzimmer, 07:02
+  (S.phone?sceneBed:SCENE[S.scene])(t);
+
+  // Atem-Physik
+  if(S.mode==='play'&&S.run){
+    const r=S.run,k=dt*60;                       // framerate-unabhängig (60-fps-Kalibrierung)
+    r.v+=(r.hold?r.rise:-r.fall)*k;
+    r.v=Math.max(0,Math.min(100,r.v));
+    r.center=50+34*Math.sin((t-r.t0)*r.speed*2)+8*Math.sin((t-r.t0)*r.speed*5.3);
+    r.center=Math.max(18,Math.min(82,r.center));
+    r.inband=r.v>=r.center-r.band/2&&r.v<=r.center+r.band/2;
+    r.focus+=(r.inband?1:-r.drain)*k;
+    S.breath=r.v/100;
+    breathUpdate(S.breath,r.hold,r.inband);
+    if(r.focus>=r.need)waveWon(); else if(r.focus<=0)waveLost();
+  }else{
+    S.breath=0.5+0.5*Math.sin(t/900);
+  }
+
+  // Jonas hinten links (mit Kontaktschatten)
+  if(S.jonas&&S.scene==='studio'){
+    const jSit=(S.pose==='sit');                 // Jonas setzt sich mit, wenn alle sitzen
+    PS=1;px(52,208,52,5,'rgba(10,6,20,0.30)');
+    figure(jSit?208:182,jSit?112:84,1.4,JONAS,t,0.5,jSit,2.2,true,(S.mode==='play')?'medi':'neutral',0,S.typing&&S.who==='j',false,null,0,true);
+  }
+
+  // Lauren
+  const lb=(S.mode==='play')?0.5+0.5*Math.sin(t/1300):0.5+0.5*Math.sin(t/1050);
+  const mood=(S.mode==='play')?'medi':((t<S.moodT)?S.mood:'neutral');
+  const mage=(performance.now()-S.moodStart)/1000;
+  let lx,ly,showL=!S.gone;
+  if(S.scene==='studio'){ lx=S.pose==='sit'?300:278; ly=S.pose==='sit'?114:56; }
+  else if(S.scene==='front'){ lx=296; ly=84; }
+  else { lx=298; ly=82; }
+
+  // Kevin — du selbst, links im Bild, ihr zugewandt
+  if(S.mode!=='end'||!S.phone){
+    const kSit=(S.scene==='studio'&&S.pose==='sit');
+    let kx,ky;
+    if(S.scene==='studio'){kx=kSit?148:104;ky=kSit?116:56;}   // sitzend: auf SEINER Matte
+    else if(S.scene==='front'){kx=112;ky=84;}
+    else if(S.mode==='tram'){kx=20;ky=98;}                    // tritt zurück — Tram fährt nicht durch ihn durch
+    else {kx=104;ky=82;}
+    const ksc=(S.scene==='street')?1.8:2;
+    const kfeet=kSit?ky+134:Math.round(ky+89*ksc);
+    PS=1;px(kx+10,kfeet,Math.round(38*ksc),7,'rgba(10,6,20,0.32)');
+    const kProp=(S.scene==='street'&&S.bottle)?'bottle':null;
+    const kBreath=(S.mode==='play')?S.breath:0.5+0.5*Math.sin(t/1000+2);
+    S._kx=kx;
+    figure(kx,ky,ksc,KEVFIG,t,kBreath,kSit,0.6,false,(S.mode==='play')?'medi':'neutral',0,S.typing&&S.who==='k',false,kProp,1,S.scene==='studio');
+  }
+
+  /* Tram-Sequenz */
+  if(S.mode==='tram'&&S.tram){
+    const el=(t-S.tram.t0)/1000;
+    let tx;                                              // Tram-Position (320er-Raum)
+    if(el<2.0){ tx=340-(340-88)*Math.min(1,el/2.0); }    // einfahren
+    else if(el<6.4){ tx=88; }                            // stehen
+    else { tx=88-(el-6.4)*130; }                         // abfahren
+    const doorOpen=(el>2.2&&el<5.4);
+    if(el>=2.0&&el<2.25) { if(!S.tram.dingDone){S.tram.dingDone=true;tone(1046.5,0.16,'square',0.05);tone(784,0.2,'square',0.04,0.16);} }
+    if(el>=5.4&&!S.tram.closeDone){S.tram.closeDone=true;tone(196,0.35,'triangle',0.06,0,140);}
+    if(el>=6.4&&!S.tram.goDone){S.tram.goDone=true;tone(140,2.2,'sawtooth',0.045,0,300);}
+
+    // sie geht die letzten Schritte ZUR TÜR und steigt ein
+    if(el<2.4){ /* steht noch */ }
+    else if(el<3.9){ const p=(el-2.4)/1.5; lx=298-p*52; ly=82+p*3; }
+    else { showL=false; S.gone=true; }
+
+    drawTram(tx,doorOpen,t);
+    // sie winkt im Fenster, während die Tram wegfährt
+    if(el>5.6){
+      // Lauren im Tram-Fenster — im Stil der Figuren, nicht als Pixelklotz
+      ctx.save();ctx.scale(1.5,1.5);
+      const wx=tx+40;
+      ctx.fillStyle='#12091e';ctx.beginPath();ctx.ellipse(wx+5,113,7.4,5.4,0,0,7);ctx.fill();
+      ctx.fillStyle='#3f8f86';ctx.beginPath();ctx.ellipse(wx+5,113,6.6,4.6,0,0,7);ctx.fill();
+      ctx.fillStyle='#12091e';ctx.beginPath();ctx.arc(wx+5,106.5,5.6,0,7);ctx.fill();
+      ctx.fillStyle='#f7d7b8';ctx.beginPath();ctx.arc(wx+5,106.5,4.8,0,7);ctx.fill();
+      ctx.fillStyle='#e2c97e';
+      ctx.beginPath();ctx.arc(wx+5,105.6,4.8,Math.PI,0);ctx.fill();
+      ctx.fillRect(wx+0.2,105.4,1.7,5.4);ctx.fillRect(wx+8.1,105.4,1.7,5.4);
+      ctx.fillStyle='#1a1620';ctx.fillRect(wx+3.3,106.2,1,1.2);ctx.fillRect(wx+5.9,106.2,1,1.2);
+      ctx.strokeStyle='#a24e5e';ctx.lineWidth=0.7;
+      ctx.beginPath();ctx.moveTo(wx+3.4,109.3);ctx.quadraticCurveTo(wx+5,110.2,wx+6.6,109.3);ctx.stroke();
+      if(S.tram.cfg.yes){
+        const up=Math.sin(t/160)>0?0:1.6;
+        ctx.fillStyle='#f7d7b8';
+        ctx.beginPath();ctx.arc(wx-1.6,104-up,1.7,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(wx+11.6,104-up,1.7,0,7);ctx.fill();
+      }
+      ctx.restore();
+    }
+    if(el>8.6&&!S.tram.done){S.tram.done=true;tramDone();}
+  }
+
+  if(showL){
+    const sc=(S.scene==='street')?1.8:2;
+    const feet=(S.scene==='studio'&&S.pose==='sit')?ly+134:Math.round(ly+89*sc);
+    PS=1;px(lx+10,feet,Math.round(38*sc),7,'rgba(10,6,20,0.32)');px(lx+18,feet+5,Math.round(30*sc),4,'rgba(10,6,20,0.22)');
+    S._lx=lx;
+    const lTalk=S.typing&&S.who==='l';
+    const lWalk=S.mode==='tram'&&S.tram&&((t-S.tram.t0)/1000)>=2.4&&((t-S.tram.t0)/1000)<3.9;
+    const lProp=S.phoneHand?'phone':(S.scene==='front'&&S.riegel)?'riegel':(S.scene==='street'&&S.bottle)?'bottle':null;
+    figure(lx,ly,sc,LAUREN,t,lb,S.scene==='studio'&&S.pose==='sit',1.4,false,mood,mage,lTalk,lWalk,lProp,-1,S.scene==='studio');
+    // Tränen — während der Wellen (ab Welle 2) UND danach, deutlich sichtbar
+    const cryNow=(S.teary&&S.scene==='street'&&S.mode!=='tram')||(S.mode==='play'&&S.run&&S.run.wave>=1);
+    if(cryNow){
+      PS=1;
+      const t1x=lx+Math.round(15*sc), t2x=lx+Math.round(29*sc), ty0=ly+Math.round(20.5*sc);
+      const drop=(t/700)%1;
+      ctx.fillStyle='rgba(170,205,255,0.85)';
+      ctx.beginPath();ctx.ellipse(t1x,ty0+3+drop*7,2,3.1,0,0,7);ctx.fill();
+      ctx.beginPath();ctx.ellipse(t2x,ty0+5+((drop+0.4)%1)*6,1.7,2.6,0,0,7);ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,0.5)';
+      ctx.fillRect(t1x-1,ty0+2+drop*7,1,1);
+      px(t1x-3,ty0-1,7,2,'rgba(190,214,255,0.35)');       // glasiger Unterlid-Schimmer
+      px(t2x-3,ty0-1,7,2,'rgba(190,214,255,0.30)');
+    }
+    // Requisiten zeichnet figure() jetzt direkt in ihrer Hand (prop-Parameter)
+  }
+
+  // (POV abgeschafft — Kevin steht als Figur im Bild)
+
+  // HUD
+  if(S.mode==='play'&&S.run){
+    PS=1.5;
+    const r=S.run,bx=294,by=44,bw=14,bh=112;
+    px(bx-2,by-2,bw+4,bh+4,'rgba(0,0,0,0.66)');
+    px(bx,by,bw,bh,'#141428');
+    const lo=r.center-r.band/2;
+    const byTop=by+bh-((lo+r.band)/100)*bh;
+    px(bx,byTop,bw,(r.band/100)*bh,r.inband?'rgba(255,224,102,0.34)':'rgba(120,140,220,0.24)');
+    px(bx,byTop,bw,1,'#ffe066');px(bx,byTop+(r.band/100)*bh-1,bw,1,'#ffe066');
+    const vy=by+bh-(r.v/100)*bh;
+    px(bx-3,vy-1,bw+6,3,r.inband?'#ffffff':'#ff9a7a');
+    px(72,186,176,7,'rgba(0,0,0,0.66)');
+    px(74,188,170,3,'#1c1c30');
+    px(74,188,Math.max(0,Math.round((r.focus/r.need)*170)),3,r.inband?'#8fe6d2':'#5a6a9a');
+    PS=1;
+    ctx.font='bold 11px ui-monospace,"Courier New",monospace';ctx.textBaseline='top';
+    const lbl=`WELLE ${r.wave+1}/${NW}`;
+    ctx.fillStyle='#000';for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++)if(a||b)ctx.fillText(lbl,21+a,252+b);
+    ctx.fillStyle='#ffe066';ctx.fillText(lbl,21,252);
+  }
+
+  // Titelkarte im DOTT-Kapitel-Stil
+  if(S.mode==='title'){
+    PS=1;
+    px(0,0,W,H,'rgba(8,4,22,0.6)');
+    px(0,60,W,120,'rgba(8,4,22,0.55)');
+    px(0,60,W,2,'#ffe066');px(0,178,W,2,'#ffe066');
+    ctx.textBaseline='top';ctx.textAlign='center';
+    ctx.font='bold 29px ui-monospace,"Courier New",monospace';
+    ctx.fillStyle='#000';ctx.fillText('EIN DATE MIT LAUREN',W/2+2,96+2);
+    ctx.fillStyle='#ffe066';ctx.fillText('EIN DATE MIT LAUREN',W/2,96);
+    ctx.font='bold 14px ui-monospace,"Courier New",monospace';
+    ctx.fillStyle='#8fe6d2';ctx.fillText('Teil Eins: Der Atem-Raum',W/2,136);
+    if(Math.sin(t/380)>0){
+      ctx.font='bold 11px ui-monospace,"Courier New",monospace';
+      ctx.fillStyle='#c8c8e0';ctx.fillText('— '+(TOUCH?'Tipp':'Klick')+', um anzufangen —',W/2,160);
+    }
+    ctx.textAlign='left';
+  }else{
+    const ax=S.who==='l'?(S._lx||W/2)+48:S.who==='k'?(S._kx||W/2)+48:S.who==='j'?280:W/2;
+    drawSay(S.full.slice(0,Math.floor(S.shown)),S.col,14,ax);
+  }
+
+  // Handy-Overlay am Ende: ihre Nachricht ploppt auf
+  if(S.phone&&S.mode==='end'){
+    PS=1;
+    const age=(t-S.phone.t0)/1000;
+    if(age<1.6){                                   // Zeitsprung-Karte, bevor das Handy hochkommt
+      ctx.globalAlpha=Math.min(1,age/0.3)*Math.min(1,(1.6-age)/0.4);
+      ctx.textAlign='center';ctx.textBaseline='top';
+      ctx.font='bold 15px ui-monospace,"Courier New",monospace';
+      ctx.fillStyle='#000';ctx.fillText(S.phone.card,W/2+2,132+2);
+      ctx.fillStyle='#ffe066';ctx.fillText(S.phone.card,W/2,132);
+      ctx.textAlign='left';ctx.globalAlpha=1;
+    }
+    const py=Math.round(300-Math.min(1,age/0.6)*234);
+    px(166,py,148,250,'#04040a');
+    px(170,py+4,140,242,'#14141f');
+    px(178,py+16,124,216,'#0e1a2c');
+    px(178,py+16,124,15,'#0a1422');
+    ctx.font='bold 9px ui-monospace,monospace';ctx.textBaseline='top';
+    ctx.fillStyle='#8fa8c8';ctx.fillText('07:02',184,py+19);
+    ctx.fillStyle='#c8d8ea';ctx.fillText('Lauren ✦',184,py+40);
+    px(182,py+36,116,1,'#1c2c44');
+    if(age>1.1){
+      const k=Math.min(1,(age-1.1)/0.3);
+      ctx.globalAlpha=k;
+      const bx=184,by=py+60+(1-k)*10;
+      px(bx,by,112,58,'#1f6b4e');
+      px(bx,by,112,2,'#2e8a66');
+      px(bx+4,by+56,6,5,'#1f6b4e');
+      ctx.fillStyle='#eafaf0';ctx.font='bold 9px ui-monospace,monospace';
+      wrapT(S.phone.msg,18).slice(0,4).forEach((ln,i)=>ctx.fillText(ln,bx+7,by+8+i*13));
+      ctx.globalAlpha=1;
+    }
+    px(228,py+238,24,4,'#2c2c3c');
+  }
+
+  schedule();
+}
+
+/* Ein Scheduler, doppelt abgesichert: rAF wenn verfügbar, sonst treibt der
+   Watchdog die Schleife an (gedrosselte WebViews, Energiesparmodus, Emulation). */
+let rafPending=false;
+function schedule(){
+  if(rafPending)return;
+  rafPending=true;
+  requestAnimationFrame(tt=>{rafPending=false;frame(tt);});
+}
+setInterval(()=>{ if(performance.now()-last>200) frame(performance.now()); },100);
+
+reset();
+schedule();
+})();
+</script>
+</body>
+</html>

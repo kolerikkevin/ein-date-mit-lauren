@@ -1679,10 +1679,10 @@ function walk2(){
   S.teary=true;
   const txt=played
     ?'Ihr kommt aus dem Kiosk,. Sie ist immer noch etwas verheult — beim Atmen hat es sie emotional erwischt.'
-    :'Ihr kommt aus dem Kiosk, jeder mit einer Flasche. Sie ist etwas verheult — sie war wirklich da drin. Du warst die meiste Zeit im Büro, in deinem Kopf.';
+    :'Ihr kommt aus dem Kiosk. Sie ist etwas verheult — sie war wirklich da drin. Du warst die meiste Zeit bei deinem Physiklehrer.';
   const os=[
     played?{t:'"Ich hab da drin an meinen Vater gedacht."',go:()=>{S.sym+=3;rk('good');reply('l','Sie bleibt kurz stehen und schaut auf ihre Flasche. "Isch auch. Nisch an deinen. An meinen." Pause. "Deshalb geh isch da hin. Man weint da für zwölf Euro fuffzig, das ist billiger als alles andere in dieser Stadt."',walk3);}}
-          :{t:'"Du hast da drin geweint. Ich hab nur zugeschaut."',go:()=>{S.sym+=2;rk('ok');reply('l','"Du hast nisch zugeschaut. Du warst im Büro, in deinem Kopf. Aber du bist geblieben. Das zählt halb."',walk3);}},
+          :{t:'"Du hast da drin geweint. Ich hab nur zugeschaut."',go:()=>{S.sym+=2;rk('ok');reply('l','"Du hast nisch zugeschaut. Du warst im Physiksaal, in deinem Kopf. Aber du immerhin hast du\'s versucht."',walk3);}},
     {t:'"Sag mir ein Gedicht. Irgendeins. Deins."',go:()=>{S.sym+=3;rk('good');reply('l','Sie sagt vier Zeilen auf Französisch. Du verstehst zwei Wörter. Eins davon ist Spezi. Sie hat es reingeschmuggelt.',walk3);}}
   ];
   if(S.breathRe!=='skip')os.push({t:'"Ich glaub, ich hab beim Atmen kurz geschlafen."',go:()=>{S.sym+=2;rk('good');reply('l','"Das war kein Schlaf. Das war Trance." — "Ich hab geschnarcht." — "Trance mit Ton."',walk3);}});

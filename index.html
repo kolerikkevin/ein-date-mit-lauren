@@ -69,7 +69,7 @@ const $ch=document.getElementById('choices'),$hint=document.getElementById('hint
 const TOUCH=matchMedia('(pointer:coarse)').matches;
 const BREATH_HINT=TOUCH
   ?'Finger aufs Bild gedrückt halten = einatmen · loslassen = ausatmen'
-  :BREATH_HINT;
+  :'Bild oder LEERTASTE gedrückt halten = einatmen · loslassen = ausatmen';
 cv.addEventListener('contextmenu',e=>e.preventDefault());   // kein Long-Press-Menü beim Atmen
 
 /* Alles zeichnet in Einheiten; PS skaliert sie auf echte Pixel (immer ganzzahlig). */

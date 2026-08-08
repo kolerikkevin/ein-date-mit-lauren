@@ -1537,9 +1537,9 @@ function preGauntlet(){
     ],'Gerade nochmal gutgegangen — das Date läuft weiter');
   }
   beat('l','"Setz disch." Sie klopft auf die Matte neben ihrer. "Und wenn du gleisch ohnmächtig wirst — isch fang disch nisch auf."',[
-    {t:'"Abgemacht. Ich falle nach rechts."',go:()=>{S.sym++;rk('good');introGauntlet();}},
-    {t:'"Wenn ich falle, dann mit Stil."',go:()=>{S.sym++;rk('good');introGauntlet();}},
-    {t:'"Ist das hier auch Energiearbeit?"',go:()=>{S.sym++;rk('ok');reply('l','"Alles ist Energiearbeit. Auch die Tram. Die Tram besonders."',introGauntlet);}},
+    {t:'"Ok, passt. Ich fall\' nach rechts."',go:()=>{S.sym++;rk('good');introGauntlet();}},
+    {t:'"Wenn ich falle, fall ich auf.."',go:()=>{S.sym++;rk('good');introGauntlet();}},
+    {t:'"Ist das hier auch Energieheilung"',go:()=>{S.sym++;rk('ok');reply('l','"Alles ist Energie."',introGauntlet);}},
     {t:'Du sagst nichts und schließt die Augen.',go:introGauntlet}
   ],'Gleich geht es los');
 }
@@ -1594,7 +1594,7 @@ function waveWon(){
   }else{
     S.sym+=4;
     S.breathRe=S.fails?'fought':'pure';
-    line('n','Es wird still. Irgendwann sagt Jonas: "Kommt langsam zurück." Deine Hände sind warm. Lauren sitzt neben dir und grinst Löcher in die Decke.');
+    line('n','Es wird still. Irgendwann sagt Jonas: "Kommt langsam zurück." Deine Hände sind warm. Du schaust zu Lauren. Sie schaut nicht zurück.');
     S.col='#ffe066';
     opts([{t:'Zurückkommen.',go:leaveStudio}],'Alle drei Wellen geschafft');
   }

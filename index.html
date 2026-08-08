@@ -1681,12 +1681,12 @@ function walk2(){
     ?'Ihr kommt aus dem Kiosk,. Sie ist immer noch etwas verheult — beim Atmen hat es sie emotional erwischt.'
     :'Ihr kommt aus dem Kiosk. Sie ist etwas verheult — sie war wirklich da drin. Du warst die meiste Zeit bei deinem Physiklehrer.';
   const os=[
-    played?{t:'"Ich hab da drin an meinen Vater gedacht."',go:()=>{S.sym+=3;rk('good');reply('l','Sie bleibt kurz stehen und schaut auf ihre Flasche. "Isch auch. Nisch an deinen. An meinen." Pause. "Deshalb geh isch da hin. Man weint da für zwölf Euro fuffzig, das ist billiger als alles andere in dieser Stadt."',walk3);}}
-          :{t:'"Du hast da drin geweint. Ich hab nur zugeschaut."',go:()=>{S.sym+=2;rk('ok');reply('l','"Du hast nisch zugeschaut. Du warst im Physiksaal, in deinem Kopf. Aber du immerhin hast du\'s versucht."',walk3);}},
-    {t:'"Sag mir ein Gedicht. Irgendeins. Deins."',go:()=>{S.sym+=3;rk('good');reply('l','Sie sagt vier Zeilen auf Französisch. Du verstehst zwei Wörter. Eins davon ist Spezi. Sie hat es reingeschmuggelt.',walk3);}}
+    played?{t:'"Ich hab da drin an meinen Vater gedacht."',go:()=>{S.sym+=3;rk('good');reply('l','"Isch auch. Nisch an deinen. An meinen." Pause. "Atmen und weinen für 18 Euro, voll das Schnäppchen."',walk3);}}
+          :{t:'"Voll gut, dass du so einen guten Zugang zu deinen Gefühlen hast."',go:()=>{S.sym+=2;rk('ok');reply('l','"Du hast nisch zugeschaut. Du warst im Physiksaal, in deinem Kopf. Aber du immerhin hast du\'s versucht."',walk3);}},
+    {t:'"Sag mir eins von deinen Gedichten."',go:()=>{S.sym+=3;rk('good');reply('l','Sie sagt vier Zeilen auf Französisch. Du verstehst zwei Wörter. Eins davon ist Spezi.',walk3);}}
   ];
-  if(S.breathRe!=='skip')os.push({t:'"Ich glaub, ich hab beim Atmen kurz geschlafen."',go:()=>{S.sym+=2;rk('good');reply('l','"Das war kein Schlaf. Das war Trance." — "Ich hab geschnarcht." — "Trance mit Ton."',walk3);}});
-  os.push({t:'"War das jetzt eigentlich ein gutes Date?"',go:()=>{S.sym+=1;rk('ok');reply('l','"Frag misch das nisch mittendrin. Das ist wie den Kuchen aufmachen, während er backt."',walk3);}});
+  if(S.breathRe!=='skip')os.push({t:'"Ich glaub, ich hab beim Atmen kurz geschlafen."',go:()=>{S.sym+=2;rk('good');reply('l','"Das war kein Schlaf. Das war Trance."',walk3);}});
+  os.push({t:'"Was machen wir jetzt?"',go:()=>{S.sym+=1;rk('ok');reply('l','"Hm... nix mehr, glaub ich."',walk3);}});
   beat('n',txt,os,'Auf dem Weg zur Haltestelle');
 }
 function walk3(){
@@ -1699,17 +1699,17 @@ function walk3(){
 function decision(){
   beat('n','Zwei Minuten. Die Anzeige zählt runter. Irgendwas musst du jetzt wollen.',[
     {t:'» Ich will sie wiedersehen. «',go:()=>revealStep(1)},
-    {t:'Ich lass es. War ein netter Abend.',go:noThanks}
+    {t:'» Ich will, dass sie mich mag. Aber ich mag sie nicht. «',go:noThanks}
   ],'Deine Entscheidung');
 }
 function noThanks(){
   SFX.endBad();react('scratch');
-  line('l','"Okay." Pause. "Isch hätte jetzt was anderes gesagt. Aber okay."');
+  line('l','"Okay." Pause. "Schade. Aber okay, passt."');
   S.col='#f0b8c8';
   opts([{t:'…',go:()=>{
     line('n','Du sagst nichts mehr. Sie auch nicht. Ihr wartet zusammen auf ihre Tram, und das ist plötzlich sehr lang.');
     opts([{t:'Warten.',go:()=>startTram({yes:false,after:
-      '"Mach\'s gut, Kevin." Sie steigt ein, ohne sich nochmal umzudrehen. Du hast es gewusst, in der Sekunde, in der du es nicht gesagt hast.'})}],'Weiter');
+      '"Mach\'s gut, Kevin." Sie steigt ein, ohne sich nochmal umzudrehen.'})}],'Weiter');
   }}],'Weiter');
 }
 

@@ -35,13 +35,18 @@
         font:inherit;font-size:11px;padding:2px 8px;cursor:pointer;letter-spacing:.5px}
   #mute:hover{color:#ffe066;border-color:#5a5a2a}
   li{-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  #say{display:none}
   @media (max-width:700px){
-    body{padding:0;align-items:flex-start}
+    body{padding:0;align-items:center}
+    #say{display:flex;align-items:center;min-height:104px;
+         background:#08080f;border:2px solid #16162a;border-bottom:none;
+         padding:10px 12px;font-weight:bold;font-size:16px;line-height:1.4;
+         text-shadow:1px 1px 0 #000}
     #frame{max-width:none}
     canvas{border-left:none;border-right:none}
     #ui{padding:8px 10px 10px;min-height:0;border-left:none;border-right:none}
     #hint{font-size:10px;margin-bottom:5px}
-    li{font-size:15px;line-height:1.4;padding:9px 6px 9px 20px}
+    li{font-size:16px;line-height:1.4;padding:10px 6px 10px 20px}
     li:before{top:9px}
     li{position:relative}
     #stats{font-size:10px;margin-top:6px;padding-top:6px}
@@ -50,6 +55,7 @@
 </head>
 <body>
 <div id="frame">
+  <div id="say"></div>
   <canvas id="c" width="480" height="300"></canvas>
   <div id="ui">
     <div id="hint">…</div>
@@ -67,6 +73,9 @@ ctx.imageSmoothingEnabled=false;
 const $ch=document.getElementById('choices'),$hint=document.getElementById('hint'),
       $sline=document.getElementById('sline'),$mute=document.getElementById('mute');
 const TOUCH=matchMedia('(pointer:coarse)').matches;
+/* Hochkant/Handy: Sprechtext als HTML-Band ÜBER der Szene — native Schärfe, Szene bleibt frei */
+const MOBILE_SAY=matchMedia('(max-width:700px)').matches;
+const $say=document.getElementById('say');
 const BREATH_HINT=TOUCH
   ?'Finger aufs Bild gedrückt halten = einatmen · loslassen = ausatmen'
   :'Bild oder LEERTASTE gedrückt halten = einatmen · loslassen = ausatmen';
@@ -1882,6 +1891,7 @@ function frame(t){
 
   // Titelkarte im DOTT-Kapitel-Stil
   if(S.mode==='title'){
+    if(MOBILE_SAY&&$say.textContent!=='Ein Date mit Lauren'){$say.textContent='Ein Date mit Lauren';$say.style.color='#ffe066';}
     PS=1;
     px(0,0,W,H,'rgba(8,4,22,0.6)');
     px(0,60,W,120,'rgba(8,4,22,0.55)');
@@ -1897,6 +1907,11 @@ function frame(t){
       ctx.fillStyle='#c8c8e0';ctx.fillText('— '+(TOUCH?'Tipp':'Klick')+', um anzufangen —',W/2,160);
     }
     ctx.textAlign='left';
+  }else if(MOBILE_SAY){
+    // Handy: Text nativ scharf im HTML-Band über der Szene
+    const txt=S.full.slice(0,Math.floor(S.shown));
+    if($say.textContent!==txt)$say.textContent=txt;
+    if($say.style.color!==S.col)$say.style.color=S.col;
   }else{
     const ax=S.who==='l'?(S._lx||W/2)+48:S.who==='k'?(S._kx||W/2)+48:S.who==='j'?280:W/2;
     drawSay(S.full.slice(0,Math.floor(S.shown)),S.col,14,ax);
@@ -1946,7 +1961,7 @@ let rafPending=false;
 function schedule(){
   if(rafPending)return;
   rafPending=true;
-  requestAnimationFrame(tt=>{rafPending=false;frame(tt);});
+  requestAnimationFrame(tt=>{rafPending=false;ctx.setTransform(1,0,0,1,0,0);frame(tt);});
 }
 setInterval(()=>{ if(performance.now()-last>200) frame(performance.now()); },100);
 

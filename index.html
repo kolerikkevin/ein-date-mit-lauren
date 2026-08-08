@@ -1080,8 +1080,13 @@ function sceneFront(t){
   poly([[288,148],[312,150],[316,178],[284,176]],'#241c30');
   poly([[291,152],[309,154],[312,174],[288,172]],'#e8ddb8');
   px(293,158,15,2,'#8a7a9a');px(293,163,12,2,'#8a7a9a');px(293,168,14,2,'#b8562e');
-  // Kevins E-Bike, am Laternenmast abgestellt — er ist damit gekommen
-  ctx.save();ctx.scale(1.5,1.5);
+  drawEBike(0,0,1,0,true);      // Kevins E-Bike, abgestellt — er ist damit gekommen
+  PS=1;
+}
+
+/* Kevins E-Bike — in Szenen-Einheiten, wiederverwendbar (abgestellt oder fahrend) */
+function drawEBike(dx,dy,sc,roll,lamp){
+  ctx.save();ctx.scale(1.5,1.5);ctx.translate(dx,dy);if(sc!==1)ctx.scale(sc,sc);
   const bY=165, w1=17, w2=71, R=12.5;
   ctx.lineCap='round';
   // Reifen
@@ -1093,7 +1098,7 @@ function sceneFront(t){
   ctx.beginPath();ctx.arc(w1,bY,R-2.8,0,7);ctx.stroke();
   ctx.beginPath();ctx.arc(w2,bY,R-2.8,0,7);ctx.stroke();
   ctx.strokeStyle='rgba(140,134,180,0.5)';ctx.lineWidth=0.5;
-  for(let a=0;a<6;a++){const an=a*Math.PI/3;
+  for(let a=0;a<6;a++){const an=a*Math.PI/3+(roll||0);
     ctx.beginPath();ctx.moveTo(w1,bY);ctx.lineTo(w1+Math.cos(an)*(R-3),bY+Math.sin(an)*(R-3));ctx.stroke();
     ctx.beginPath();ctx.moveTo(w2,bY);ctx.lineTo(w2+Math.cos(an)*(R-3),bY+Math.sin(an)*(R-3));ctx.stroke();}
   // Rahmen (Tiefeinsteiger, wie ein Trekking-E-Bike)
@@ -1135,10 +1140,12 @@ function sceneFront(t){
   ctx.strokeStyle='#4a4a62';ctx.lineWidth=1.4;
   ctx.beginPath();ctx.moveTo(58,136);ctx.lineTo(w2+7,138);ctx.stroke();
   ctx.beginPath();ctx.moveTo(w2+7,138);ctx.lineTo(w2+3,bY-6);ctx.stroke();
-  // Frontlicht wirft einen kleinen Kegel auf den Gehweg
+  // Frontlicht (+ Lichtkegel nur beim abgestellten Rad vor dem Studio)
   ctx.fillStyle='#ffe9a8';ctx.fillRect(17.5,137.5,2.6,2.4);
-  ctx.fillStyle='rgba(255,233,168,0.10)';
-  ctx.beginPath();ctx.moveTo(18,140);ctx.lineTo(0,164);ctx.lineTo(0,178);ctx.lineTo(21,168);ctx.closePath();ctx.fill();
+  if(lamp){
+    ctx.fillStyle='rgba(255,233,168,0.10)';
+    ctx.beginPath();ctx.moveTo(18,140);ctx.lineTo(0,164);ctx.lineTo(0,178);ctx.lineTo(21,168);ctx.closePath();ctx.fill();
+  }
   // Schatten unter den Rädern
   ctx.fillStyle='rgba(10,6,20,0.30)';
   ctx.beginPath();ctx.ellipse(w1,bY+11,8,2.2,0,0,7);ctx.fill();
@@ -1310,6 +1317,8 @@ function sceneStreet(t){
   poly([[271,36],[275,36],[277,104],[273,104]],'#141026');
   px(265,34,16,4,'#2a2d3e');px(267,38,12,3,'#ffe9a8');
   poly([[258,40],[288,40],[300,110],[246,110]],'rgba(255,224,150,0.06)');
+  // Kevins Rad — er hat es vom Studio hierher geschoben (steht am Späti)
+  if(S.mode!=='ride')drawEBike(16,-30,0.82,0,false);
   PS=1;
 }
 /* Kevins Schlafzimmer, 07:02 — hier kommt ihre Nachricht an */
@@ -1523,7 +1532,7 @@ function preGauntlet(){
   S.jonas=true;S.scene='studio';S.pose='sit';   // Text sagt sitzen → Bild zeigt sitzen
   if(S.cringe>=7&&!S.cringeWarned){             // kein Game Over mehr — nur ein Dämpfer
     S.cringeWarned=true;SFX.bad();react('roll');
-    return beat('l','Sie legt ihre Matte demonstrativ einen halben Meter weiter weg. "Isch brauche Raum. Du bist anstrengend. Interessant-anstrengend. Aber anstrengend."',[
+    return beat('l','Sie legt ihre Matte demonstrativ einen halben Meter weiter weg. "Isch brauche Raum."',[
       {t:'…',go:preGauntlet}
     ],'Gerade nochmal gutgegangen — das Date läuft weiter');
   }
@@ -1745,6 +1754,22 @@ function startTram(cfg){
   tone(220,1.4,'sawtooth',0.035,0,180);
 }
 function tramDone(){
+  // Erst das Rad: er ist damit gekommen, er fährt damit heim
+  S.mode='talk';
+  const cfg=S.tram.cfg;
+  line('n',cfg.yes
+    ? 'Die Tram ist weg. Du stehst noch kurz da. Dann schließt du dein Rad auf.'
+    : 'Die Tram ist weg. Es ist still. Du schließt dein Rad auf.');
+  S.col='#dcdce8';
+  opts([{t:'Aufsteigen und heimfahren.',go:startRide}],'Dein Rad steht am Späti');
+}
+function startRide(){
+  S.mode='ride';S.ride={t0:performance.now(),done:false};
+  line('n','');S.col='#dcdce8';
+  opts([],'…');
+  tone(120,0.5,'triangle',0.05,0,90);tone(300,0.25,'sine',0.03,0.1);   // Motor zu, Anfahren
+}
+function endStep(){
   const cfg=S.tram.cfg;
   S.mode='end';
   cfg.yes?SFX.end():SFX.endBad();
@@ -1795,7 +1820,7 @@ function reset(){
   S.pose='stand';S.mode='talk';S.run=null;ti=0;breathStop();
   S.tram=null;S.gone=false;S.mood='neutral';S.moodT=0;S.moodStart=0;
   S.breathRe=null;S.riegel=false;S.kbar=false;S.barGiven=false;S.bottle=false;S.teary=false;
-  S.cringeWarned=false;S.phone=null;S.autoNext=null;S.autoT=0;S.who='n';S.phoneHand=false;
+  S.cringeWarned=false;S.phone=null;S.ride=null;S.autoNext=null;S.autoT=0;S.who='n';S.phoneHand=false;
   S.mode='title';S.full='';S.typing=false;
   opts([],'Ein Abend in München — '+(TOUCH?'tipp':'klick')+' ins Bild');
 }
@@ -1907,8 +1932,21 @@ function frame(t){
     if(el>8.6&&!S.tram.done){S.tram.done=true;tramDone();}
   }
 
+  /* Heimfahrt: Kevin auf dem E-Bike aus dem Bild raus */
+  if(S.mode==='ride'&&S.ride){
+    const el=(t-S.ride.t0)/1000;
+    const p=Math.min(1,el/3.6);
+    const dx=8-p*p*250;                        // beschleunigt nach links weg
+    const bob=Math.sin(el*11)*1.2;             // Tritt-Wippen
+    const kcx=(87+dx)*1.5-31, ktop=45+bob;     // Hüfte sitzt auf dem Sattel, Füße auf Pedalhöhe
+    PS=1;px(kcx+6,240,84,7,'rgba(10,6,20,0.30)');
+    figure(kcx,ktop,1.8,KEVFIG,t,0.5+0.5*Math.sin(t/700),false,0.6,false,'neutral',0,false,false,null,-1,false);
+    drawEBike(dx,-105,1.5,-el*7,false);        // Rad VOR ihm — verdeckt die Beine wie beim Fahren
+    if(el>3.9&&!S.ride.done){S.ride.done=true;endStep();}
+  }
+
   // Kevin — du selbst, links im Bild, ihr zugewandt (nach der Tram gezeichnet = er steht davor)
-  if(S.mode!=='end'||!S.phone){
+  if(S.mode!=='ride'&&(S.mode!=='end'||!S.phone)){
     const kSit=(S.scene==='studio'&&S.pose==='sit');
     let kx,ky;
     if(S.scene==='studio'){kx=kSit?148:104;ky=kSit?116:56;}   // sitzend: auf SEINER Matte

@@ -1568,13 +1568,13 @@ function introGauntlet(){
 function skipGauntlet(){
   S.mode='talk';S.run=null;S.pose='sit';breathStop();SFX.meh();
   S.breathRe='skip';
-  line('n','Du atmest irgendwie mit und denkst dabei an deine Mails. Es ist okay. Es ist nur nicht das, wofür der Kurs gedacht war.');
-  opts([{t:'Danach rausgehen.',go:leaveStudio}],'Übersprungen  ·  keine Wellen');
+  line('n','Du atmest irgendwie mit und überlegst, wie es Lauren jetzt geht.');
+  opts([{t:'Rausgehen - bzw. schweben.',go:leaveStudio}],'Übersprungen.');
 }
 /* Übergang: Studio → Straße, damit Jonas nicht einfach aus dem Spiel fällt */
 function leaveStudio(){
   S.mode='talk';
-  line('n','Schuhe wieder an, ein Nicken zu Jonas — "Bis nächste Woche. Oder bis gleich, das entscheidet euer Nervensystem." Draußen ist die Nacht kühl geworden.');
+  line('n','Schuhe wieder an, ein Nicken zu Jonas — "Bis demnächst." Draußen hat es sich abgekühlt.');
   opts([{t:'Raus in die Nacht.',go:walkScene}],'Ihr verlasst das Studio');
 }
 function startWave(i){
@@ -1603,9 +1603,9 @@ function waveLost(){
   S.mode='talk';S.fails++;breathStop();SFX.lose();
   const i=S.run.wave;
   const jokes=[
-    'Du hyperventilierst wie ein defekter Kühlschrank. Jonas schaut kurz besorgt.',
+    'Du hyperventilierst wie ein Fisch an Land. Jonas schaut besorgt und berüht dich an den Fußsohlen.',
     'Du atmest jetzt einfach nur noch. Ohne Konzept.',
-    'Irgendwo im Raum sagt jemand "schhhh". Es könntest du gewesen sein.',
+    'Irgendwo im Raum sagt jemand "schhhh".',
     'Lauren, ohne die Augen zu öffnen: "Atme, nicht arbeite."'
   ];
   line('n',jokes[Math.min(jokes.length-1,S.fails-1)]+' Jonas: "Kein Problem. Nochmal."');
@@ -1644,16 +1644,16 @@ function walkScene(){
   S.scene='street';S.pose='stand';S.jonas=false;S.mode='talk';S.teary=true;
   const br=S.breathRe;
   if(br==='pure'){
-    return beat('l','"Du warst ganz weg da drin, non? Isch hab kurz rübergeguckt. Du hast geleuchtet wie ein Toaster."',[
-      {t:'"Du solltest bei deiner eigenen Atmung bleiben."',go:()=>{S.sym+=2;rk('good');reply('l','"Isch war bei meiner. Deine war nur lauter. Auf die gute Art."',walkSpaeti);}},
+    return beat('l','"Du warst ganz weg da drin, non? Isch glaub, isch hab gesehen, wie dein Seele über die geschwebt hat."',[
+      {t:'"Du solltest bei deiner eigenen Atmung bleiben."',go:()=>{S.sym+=2;rk('good');reply('l','"Isch war bei meiner. Deine war halt sehr laut."',walkSpaeti);}},
       {t:'"Ich hab nichts mitbekommen. Nicht mal dich."',go:()=>{S.sym+=2;rk('good');walkSpaeti();}},
-      {t:'"Toaster leuchten nicht."',go:()=>{S.sym+=1;rk('ok');reply('l','"Meiner schon. Isch hab ihn kaputt gemacht. Langes Gedicht."',walkSpaeti);}}
+      {t:'"Ja ich glaub ich hatte eine Out-Of-Body-Experience."',go:()=>{S.sym+=1;rk('ok');reply('l','"Hm.... Dad Bod Experience?"',walkSpaeti);}}
     ],'Sie hat dich beobachtet');
   }
   if(br==='fought'){
-    return beat('l','"Du hast da drin gekämpft. Mit dir selber. Isch mag Leute, die nochmal von vorn anfangen."',[
-      {t:'"Ich hab mehrmals verloren."',go:()=>{S.sym+=2;rk('good');reply('l','"Isch weiß. Isch hab mitgezählt. Es war das Beste am ganzen Kurs."',walkSpaeti);}},
-      {t:'"Der Atem hat angefangen."',go:()=>{S.sym+=1;rk('ok');walkSpaeti();}}
+    return beat('l','"Du hast da drin gekämpft. "',[
+      {t:'"Ich hab mehrmals die Atmung verkackt."',go:()=>{S.sym+=2;rk('good');reply('l','"Isch weiß. Isch hab mitgezählt."',walkSpaeti);}},
+      {t:'"Okay... und wie oft hab ich falsch geatmet?"',go:()=>{S.sym+=1;rk('ok');walkSpaeti();}}
     ],'Sie hat mitgezählt');
   }
   if(br==='skip'){

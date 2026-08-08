@@ -1717,15 +1717,15 @@ function noThanks(){
 function revealStep(n){
   if(n===1){
     tone(523.25,0.9,'sine',0.06);
-    line('n','Du sagst es. Es kommt schneller raus als geplant und ungefähr halb so elegant.');
+    line('n','Ich fänds cool, wenn wir uns wieder sehen. (♫ "Ich könnt mich dran gewöhn dich öfters zu sehen..." ♫)');
     S.col='#ffe066';
-    return opts([{t:'…',go:()=>revealStep(2)}],'Gesagt ist gesagt');
+    return opts([{t:'…',go:()=>revealStep(2)}],'Jetzt isses raus.');
   }
   const score=S.sym-S.cringe*1.6+S.waves*1.4;
   if(score>=14){
     SFX.end();react('laugh');S.phoneHand=true;
-    line('l','"Warte." Sie dreht dir ihr Handy hin. Da steht schon eine getippte, noch nicht abgeschickte Nachricht: "Samstag?" — "Isch wollte nur nisch die Erste sein."');
-    opts([{t:'"Samstag."',go:()=>{rk('good');line('l','"Samstag. Du bringst die Riegel — du weißt ja inzwischen, wo es sie nisch gibt. Isch bringe die Spezi. Und komm mit dem Rad."');
+    line('l','"Warte." Sie dreht dir ihr Handy hin. Du tippst deine Nummer ein.');
+    opts([{t:'"Ja cool."',go:()=>{rk('good');line('l','"Samstag. Du bringst die Riegel — du weißt ja inzwischen, wo es sie nisch gibt. Isch bringe die Spezi. Und komm mit dem Rad."');
       opts([{t:'…',go:()=>startTram({yes:true,msg:'Samstag? — habe es endlisch abgeschickt. Riegel: du. Spezi: isch. E-Bike: nisch vergessen. ✦',after:'Sie winkt durch die Scheibe, mit beiden Händen, wie ein Kind. Lesen wirst du ihre Nachricht erst am Morgen.'})}],'Ihre Tram kommt');}}],'Sie hatte es schon getippt');
   }else if(score>=8){
     SFX.end();react('laugh');

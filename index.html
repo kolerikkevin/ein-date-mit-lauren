@@ -13,6 +13,7 @@
     font-family:ui-monospace,"SF Mono",Menlo,Consolas,"Courier New",monospace;
     display:flex;align-items:center;justify-content:center;padding:14px;
     -webkit-font-smoothing:none;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
   }
   #frame{width:100%;max-width:960px}
   canvas{
@@ -37,11 +38,15 @@
   li{-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
   #say{display:none}
   @media (max-width:700px){
-    body{padding:0;align-items:center}
-    #say{display:flex;align-items:center;min-height:104px;
+    body{padding:0;align-items:flex-start}
+    #frame{padding-top:6px}
+    #say{display:flex;align-items:center;height:132px;overflow:hidden;
          background:#08080f;border:2px solid #16162a;border-bottom:none;
          padding:10px 12px;font-weight:bold;font-size:16px;line-height:1.4;
          text-shadow:1px 1px 0 #000}
+    #say.mid{font-size:14px;line-height:1.35}
+    #say.long{font-size:12.5px;line-height:1.3}
+    #say.xl{font-size:11px;line-height:1.25}
     #frame{max-width:none}
     canvas{border-left:none;border-right:none}
     #ui{padding:8px 10px 10px;min-height:0;border-left:none;border-right:none}
@@ -80,6 +85,10 @@ const BREATH_HINT=TOUCH
   ?'Finger aufs Bild gedrückt halten = einatmen · loslassen = ausatmen'
   :'Bild oder LEERTASTE gedrückt halten = einatmen · loslassen = ausatmen';
 cv.addEventListener('contextmenu',e=>e.preventDefault());   // kein Long-Press-Menü beim Atmen
+// Langes Halten beim Atmen darf keinen Text markieren (Touch-Selektion greift sonst aufs Sprech-Band über)
+document.getElementById('say').addEventListener('contextmenu',e=>e.preventDefault());
+document.addEventListener('selectstart',e=>e.preventDefault());
+const clearSel=()=>{const s=window.getSelection&&getSelection();if(s&&!s.isCollapsed)s.removeAllRanges();};
 
 /* Alles zeichnet in Einheiten; PS skaliert sie auf echte Pixel (immer ganzzahlig). */
 let PS=1;
@@ -1537,7 +1546,7 @@ const down=e=>{
   if(skipTyping()){if(e&&e.cancelable)e.preventDefault();return;}
   if(e&&e.cancelable)e.preventDefault();
 };
-const up=()=>{if(S.run)S.run.hold=false;};
+const up=()=>{if(S.run)S.run.hold=false;clearSel();};
 cv.addEventListener('pointerdown',down);
 addEventListener('pointerup',up);
 addEventListener('pointercancel',up);
@@ -1891,7 +1900,7 @@ function frame(t){
 
   // Titelkarte im DOTT-Kapitel-Stil
   if(S.mode==='title'){
-    if(MOBILE_SAY&&$say.textContent!=='Ein Date mit Lauren'){$say.textContent='Ein Date mit Lauren';$say.style.color='#ffe066';}
+    if(MOBILE_SAY&&$say.textContent!=='Ein Date mit Lauren'){$say.textContent='Ein Date mit Lauren';$say.style.color='#ffe066';$say.className='';}
     PS=1;
     px(0,0,W,H,'rgba(8,4,22,0.6)');
     px(0,60,W,120,'rgba(8,4,22,0.55)');
@@ -1912,6 +1921,10 @@ function frame(t){
     const txt=S.full.slice(0,Math.floor(S.shown));
     if($say.textContent!==txt)$say.textContent=txt;
     if($say.style.color!==S.col)$say.style.color=S.col;
+    // Schriftgröße am VOLLTEXT festmachen — sonst schrumpft sie mitten im Tippen
+    const fl=(S.full||'').length;
+    const cls=fl>250?'xl':fl>190?'long':fl>130?'mid':'';
+    if($say.className!==cls)$say.className=cls;
   }else{
     const ax=S.who==='l'?(S._lx||W/2)+48:S.who==='k'?(S._kx||W/2)+48:S.who==='j'?280:W/2;
     drawSay(S.full.slice(0,Math.floor(S.shown)),S.col,14,ax);

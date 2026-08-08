@@ -47,6 +47,7 @@
     #say.mid{font-size:14px;line-height:1.35}
     #say.long{font-size:12.5px;line-height:1.3}
     #say.xl{font-size:11px;line-height:1.25}
+    #say.narr{font-style:italic;font-weight:normal}
     #frame{max-width:none}
     canvas{border-left:none;border-right:none}
     #ui{padding:8px 10px 10px;min-height:0;border-left:none;border-right:none}
@@ -1366,10 +1367,26 @@ function sceneBed(t){
   ctx.beginPath();ctx.moveTo(59,133);ctx.quadraticCurveTo(61.5,134.6,64,133.4);ctx.stroke();
   ctx.beginPath();ctx.moveTo(64.5,136);ctx.quadraticCurveTo(65.8,137.4,64.6,138.4);ctx.stroke();
   ctx.beginPath();ctx.moveTo(60,140.4);ctx.quadraticCurveTo(62,141.2,63.6,140.6);ctx.stroke();
-  // Schulter über der Bettdecke, Decke bis zum Kinn
+  // Hals + Schulter + Arm auf der Decke — sonst liegt da nur ein Kopf
+  ctx.fillStyle='#e8c09a';
+  ctx.beginPath();ctx.ellipse(66,141.5,5.2,3.6,0.25,0,7);ctx.fill();      // Hals
+  ctx.fillStyle='#4a6f9e';                                                // Schlaf-Shirt
+  ctx.beginPath();ctx.moveTo(62,146);ctx.quadraticCurveTo(78,138.5,96,141);
+  ctx.lineTo(99,152);ctx.quadraticCurveTo(78,150,62,153);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#3d5f8a';
+  ctx.beginPath();ctx.ellipse(88,146.5,13,5.4,0.08,0,7);ctx.fill();       // Oberarm unter dem Stoff
+  ctx.fillStyle='#e8c09a';
+  ctx.beginPath();ctx.ellipse(104,150,7.4,4.4,0.12,0,7);ctx.fill();       // Unterarm
+  ctx.beginPath();ctx.ellipse(113,152,4.6,3.6,0.2,0,7);ctx.fill();        // Hand liegt auf der Decke
+  ctx.strokeStyle='#c99b74';ctx.lineWidth=0.7;
+  ctx.beginPath();ctx.moveTo(111,153.4);ctx.lineTo(116,153.8);ctx.stroke();
+  // Decke über dem Körper, bis zur Brust
   ctx.fillStyle='#7a4a5e';
-  ctx.beginPath();ctx.moveTo(64,146);ctx.quadraticCurveTo(96,140,150,150);
-  ctx.lineTo(150,160);ctx.quadraticCurveTo(96,152,64,154);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(96,152);ctx.quadraticCurveTo(130,146+br2,168,153);
+  ctx.lineTo(168,166);ctx.quadraticCurveTo(130,158,96,161);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#94607a';
+  ctx.beginPath();ctx.moveTo(96,152.6);ctx.quadraticCurveTo(130,146.8+br2,168,153.6);
+  ctx.lineTo(168,155.4);ctx.quadraticCurveTo(130,148.8+br2,96,154.4);ctx.closePath();ctx.fill();
   // zZz steigen auf
   const zf=(t/1000)%3;
   ctx.font='bold 7px ui-monospace,monospace';ctx.textBaseline='top';
@@ -1406,7 +1423,7 @@ function sceneTitle(t){
   poly([[114,90],[212,94],[211,104],[113,100]],'#2f2352');
   PS=1;
   ctx.save();ctx.translate(244,138);ctx.rotate(0.035);
-  ctx.font='bold 13px ui-monospace,"Courier New",monospace';ctx.textBaseline='top';
+  ctx.font=(S.narr?'italic 13px':'bold 13px')+' ui-monospace,"Courier New",monospace';ctx.textBaseline='top';
   ctx.fillStyle='#ffd98a';ctx.fillText('ATEM RAUM',0,0);ctx.restore();
   PS=1.5;
   // Schaufenster mit Leben drin
@@ -1437,75 +1454,146 @@ function txt(s,x,y,size,col,bold){
   ctx.font=(bold?'bold ':'')+size+'px ui-monospace,"Courier New",monospace';
   ctx.fillStyle=col;ctx.textBaseline='top';ctx.fillText(s,x,y);
 }
-function phoneChrome(title,t){
+/* Das Handy in Kevins Hand — poppt hoch, Screen ist die Bühne fürs Vorspiel */
+function drawDevice(t,pop){
   PS=1;
-  px(0,0,W,H,'#0b0f18');
-  px(0,0,W,20,'#070a12');
-  txt('19:12',8,5,10,'#7a8aa4',true);
-  txt(title,W/2-ctx.measureText(title).width/2-8,5,10,'#e8eaf0',true);
-  txt('▮ 68%',W-52,5,10,'#7a8aa4',true);
+  px(0,0,W,H,'#0a0812');                                  // abgedunkeltes Zimmer
+  dgrad(0,0,W,H,['#120d24','#0b0816','#08060f']);
+  const dw=200,dh=290;
+  const e=1-Math.pow(1-Math.min(1,pop),3);                // weiches Ausrollen
+  const dx=Math.round((W-dw)/2), dy=Math.round(H-dh-2+(1-e)*300);
+  px(dx-2,dy-2,dw+4,dh+4,'rgba(0,0,0,0.5)');
+  px(dx,dy,dw,dh,'#1b1d26');                              // Gehäuse
+  px(dx+2,dy+2,dw-4,dh-4,'#0a0c12');
+  px(dx+dw/2-22,dy+4,44,5,'#1b1d26');                     // Notch
+  const sc={x:dx+7,y:dy+11,w:dw-14,h:dh-20};
+  px(sc.x,sc.y,sc.w,sc.h,'#0b0f18');
+  return sc;
 }
+function statusbar(sc,title,accent){
+  px(sc.x,sc.y,sc.w,16,'#070a12');
+  txt('19:12',sc.x+6,sc.y+4,9,'#7a8aa4',true);
+  ctx.font='bold 9px ui-monospace,"Courier New",monospace';
+  const tw=ctx.measureText(title).width;
+  txt(title,sc.x+sc.w/2-tw/2,sc.y+4,9,accent||'#e8eaf0',true);
+  txt('68%',sc.x+sc.w-24,sc.y+4,9,'#7a8aa4',true);
+}
+function portrait(cx,cy,r,P,t,face){
+  ctx.save();ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.clip();
+  dgrad(cx-r,cy-r,r*2,r*2,['#3a2d5e','#4a3a72','#5b4a86']);
+  const sc=r/19;                                  // Kopf + Schultern passen in den Kreis
+  ctx.translate(cx-24*sc,cy-2-13*sc);
+  figure(0,0,sc,P,t,0.5+0.5*Math.sin(t/1400),false,0.9,false,'neutral',0,false,false,null,face,false);
+  ctx.restore();
+  ctx.strokeStyle='#e8eaf0';ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.stroke();
+}
+function introPop(){return Math.min(1,((performance.now()-(S.intro?S.intro.t0:0))/1000)/0.55);}
+
 function sceneProfile(t){
-  phoneChrome('hinge',t);
-  // Foto mit ihrem Portrait
-  const fx=14,fy=30,fw=150,fh=170;
-  px(fx-2,fy-2,fw+4,fh+4,'#1c2536');
+  const sc=drawDevice(t,introPop());
+  statusbar(sc,'hinge','#f0b8c8');
+  const fx=sc.x+8,fy=sc.y+22,fw=sc.w-16,fh=104;
+  px(fx-1,fy-1,fw+2,fh+2,'#1c2536');
   ctx.save();ctx.beginPath();ctx.rect(fx,fy,fw,fh);ctx.clip();
   dgrad(fx,fy,fw,fh,['#3a2d5e','#4a3a72','#5b4a86']);
-  ctx.translate(fx+fw/2-56,fy-16);
-  figure(0,0,2.5,LAUREN,t,0.5+0.5*Math.sin(t/1400),false,0.9,false,'neutral',0,false,false,null,0.4,false);
+  ctx.translate(fx+fw/2-38,fy-12);
+  figure(0,0,1.68,LAUREN,t,0.5+0.5*Math.sin(t/1400),false,0.9,false,'neutral',0,false,false,null,0.4,false);
   ctx.restore();
-  txt('LAUREN, 34',fx,fy+fh+8,12,'#f0b8c8',true);
-  txt('München · 4 km entfernt',fx,fy+fh+24,10,'#8b93a7');
-  // Profilangaben rechts
-  let y=32;
-  txt('Dichterin & Energieheilerin',176,y,12,'#e8eaf0',true);y+=18;
-  txt('Französin in München',176,y,10,'#8fe6d2');y+=22;
+  let y=fy+fh+7;
+  txt('LAUREN, 34',fx,y,13,'#f0b8c8',true);y+=15;
+  txt('Dichterin & Energieheilerin',fx,y,10,'#e8eaf0');y+=12;
+  txt('Französin · München · 4 km',fx,y,9,'#8fe6d2');y+=14;
   const prompts=[
-    ['Zwei Wahrheiten, eine Lüge','Ich bin Französin. Ich atme','beruflich. Ich bin pünktlich.'],
     ['Meine Liebessprache','Proteinriegel. Schokolade,','vegan. Nicht verhandelbar.'],
     ['Mein Gedicht von heute','„München atmet flach.','Isch auch."'],
   ];
   for(const p of prompts){
-    card(172,y,296,50);
-    txt(p[0],180,y+6,9,'#7f9ad0',true);
-    txt(p[1],180,y+19,10,'#e8eaf0');
-    txt(p[2],180,y+32,10,'#e8eaf0');
-    y+=56;
+    card(fx,y,fw,42);
+    txt(p[0],fx+7,y+5,9,'#7f9ad0',true);
+    txt(p[1],fx+7,y+17,10,'#e8eaf0');
+    txt(p[2],fx+7,y+29,10,'#e8eaf0');
+    y+=46;
   }
-}
-function sceneChat(t){
-  phoneChrome('Lauren ✦',t);
-  const msgs=[
-    [0,'Frage aus der App: „Ich geh noch schnell zum Rewe.'],
-    [0,'Soll ich dir was mitbringen?"'],
-    [1,'Ja bitte: Koro Proteinbar, Schokolade, vegan.'],
-    [2,'Kommt. Wann?'],
-    [1,'Donnerstag. Isch gehe zu Breathwork.'],
-    [2,'Was ist Breathwork?'],
-    [1,'Zwei Stunden schnell atmen im Liegen, bis dein'],
-    [1,'Körper komische Sachen macht. Manche weinen,'],
-    [1,'manche lachen. Isch mache meistens beides.'],
-    [2,'Klingt nach einem guten ersten Date.'],
-    [1,'Oder nach einem sehr kurzen. 19:50, Atem Raum. ✦'],
-  ];
-  const el=(t-(S.intro?S.intro.t0:t))/1000;
-  const shown=S.intro&&S.intro.all?msgs.length:Math.min(msgs.length,Math.floor(el/0.45)+1);
-  let y=28;
-  for(let i=0;i<shown;i++){
-    const[kind,s]=msgs[i];
-    const w=Math.min(300,s.length*6.1+16);
-    if(kind===0){txt(s,W/2-s.length*3.05,y+3,10,'#7a8aa4');y+=15;continue;}
-    const mine=kind===2;
-    const x=mine?W-16-w:16;
-    px(x,y,w,17,mine?'#1f4f8a':'#232a38');
-    txt(s,x+8,y+4,10,mine?'#dceaff':'#e8eaf0');
-    y+=21;
-  }
-  if(shown<msgs.length&&Math.sin(t/220)>0)txt('…',20,y+4,12,'#7a8aa4',true);
 }
 
-const SCENE={front:sceneFront,studio:sceneStudio,street:sceneStreet,title:sceneTitle,profile:sceneProfile,chat:sceneChat};
+function sceneMatch(t){
+  const sc=drawDevice(t,introPop());
+  const el=(t-(S.intro?S.intro.t0:t))/1000;
+  dgrad(sc.x,sc.y,sc.w,sc.h,['#3a1030','#6a1f48','#a83a63']);
+  statusbar(sc,'hinge','#ffd9e6');
+  // Funken
+  for(let i=0;i<26;i++){
+    const a=(i*97)%360, rr=18+((i*53)%70)+Math.sin(el*2+i)*4;
+    const cxp=sc.x+sc.w/2+Math.cos(a)*rr, cyp=sc.y+118+Math.sin(a)*rr*0.8;
+    px(Math.round(cxp),Math.round(cyp),2,2,i%3?'rgba(255,214,120,0.75)':'rgba(255,255,255,0.65)');
+  }
+  const pop=Math.min(1,Math.max(0,(el-0.25)/0.4));
+  ctx.font='bold 21px ui-monospace,"Courier New",monospace';
+  const s1='ES HAT';
+  const s2='GEMATCHT!';
+  ctx.textBaseline='top';
+  const w1=ctx.measureText(s1).width,w2=ctx.measureText(s2).width;
+  ctx.fillStyle='#2a0c1e';ctx.fillText(s1,sc.x+sc.w/2-w1/2+2,sc.y+34+2);ctx.fillText(s2,sc.x+sc.w/2-w2/2+2,sc.y+58+2);
+  ctx.fillStyle='#ffe066';ctx.fillText(s1,sc.x+sc.w/2-w1/2,sc.y+34);ctx.fillText(s2,sc.x+sc.w/2-w2/2,sc.y+58);
+  const r=34+pop*4;
+  portrait(sc.x+sc.w/2-34,sc.y+124,r,LAUREN,t,0.6);
+  portrait(sc.x+sc.w/2+34,sc.y+124,r,KEVFIG,t,-0.6);
+  ctx.font='bold 11px ui-monospace,"Courier New",monospace';
+  const s3='Du und Lauren mögt euch.';
+  const w3=ctx.measureText(s3).width;
+  txt(s3,sc.x+sc.w/2-w3/2,sc.y+176,11,'#ffd9e6',true);
+  // Button
+  const bw=sc.w-40,bx=sc.x+20,by=sc.y+204;
+  px(bx,by,bw,26,'#ffffff');px(bx+1,by+1,bw-2,24,'#f4f4f8');
+  ctx.font='bold 11px ui-monospace,"Courier New",monospace';
+  const s4='NACHRICHT SCHREIBEN';
+  const w4=ctx.measureText(s4).width;
+  txt(s4,sc.x+sc.w/2-w4/2,by+8,11,'#a83a63',true);
+  if(Math.sin(t/300)>0)px(bx,by,bw,26,'rgba(255,224,102,0.16)');
+}
+
+function sceneChat(t){
+  const sc=drawDevice(t,introPop());
+  statusbar(sc,'Lauren ✦','#f0b8c8');
+  const MSG=[
+    ['k','Ich geh noch schnell zum Rewe — soll ich dir was mitbringen?'],
+    ['l','Koro Proteinbar. Schokolade, vegan.'],
+    ['l','Donnerstag Breathwork? Zwei Stunden atmen, bis man weint oder lacht.'],
+    ['k','Erstes Date. Klar.'],
+    ['l','19:50. Atem Raum. ✦'],
+  ];
+  const el=(t-(S.intro?S.intro.t0:t))/1000;
+  const all=S.intro&&S.intro.all;
+  const shown=all?MSG.length:Math.min(MSG.length,Math.floor(el/0.8)+1);
+  // Blasen vermessen
+  const bubbles=[];let total=0;
+  for(let i=0;i<shown;i++){
+    const lines=wrapT(MSG[i][1],22);
+    const h=lines.length*15+10;
+    bubbles.push({who:MSG[i][0],lines,h});total+=h+4;
+  }
+  const top=sc.y+18,viewH=sc.h-22;
+  let y=top+Math.min(0,viewH-total);                       // neue Nachrichten schieben nach oben
+  ctx.save();ctx.beginPath();ctx.rect(sc.x,top,sc.w,viewH);ctx.clip();
+  for(const b of bubbles){
+    let wmax=0;for(const ln of b.lines)wmax=Math.max(wmax,ln.length*7.25);
+    const bw=Math.min(sc.w-24,wmax+14);
+    const mine=b.who==='k';
+    const bx=mine?sc.x+sc.w-8-bw:sc.x+8;
+    px(bx,y,bw,b.h,mine?'#1f4f8a':'#242b3a');
+    px(bx,y,bw,1,mine?'#2f66ab':'#2e3648');
+    b.lines.forEach((ln,i)=>txt(ln,bx+8,y+6+i*15,12,mine?'#dceaff':'#e8eaf0'));
+    y+=b.h+4;
+  }
+  if(shown<MSG.length){
+    px(sc.x+8,y,26,14,'#242b3a');
+    const d=Math.floor((t/260)%3);
+    for(let i=0;i<3;i++)px(sc.x+12+i*7,y+6,3,3,i<=d?'#8b93a7':'#3a4257');
+  }
+  ctx.restore();
+}
+
+const SCENE={front:sceneFront,studio:sceneStudio,street:sceneStreet,title:sceneTitle,profile:sceneProfile,match:sceneMatch,chat:sceneChat};
 
 /* ================= Text à la Monkey Island ================= */
 function wrapT(s,max){const o=[];let l='';for(const w of s.split(' ')){if((l+w).length>max){o.push(l.trim());l='';}l+=w+' ';}if(l.trim())o.push(l.trim());return o;}
@@ -1572,16 +1660,16 @@ const NAME_OF={l:'Lauren',j:'Jonas',k:'Kevin'};
 const COL_OF={l:'#f0b8c8',j:'#e0c27a',k:'#9ac0f0',n:'#b8b8cc'};
 function line(who,txt){
   const t=(txt||'').trim();
-  // Wer redet hier wirklich? Name nur vor reine Rede; wechseln mehrere Sprecher
-  // in einer Zeile, ist es Erzähltext — sonst steht "Lauren:" vor Kevins Satz.
+  // EINE Regel für alles: Nur wenn die Zeile durchgehend die Rede einer Person ist,
+  // bekommt sie Name + Farbe. Sobald erzählt wird oder mehrere sprechen → Erzähler.
   const quote=/^["»„]/.test(t);
-  const swap=/["»“]\s*[—–-]\s*["»„]/.test(t);
-  const eff=(who==='n'||swap)?'n':who;
-  S.who=eff;
-  // …und nicht, wenn der Satz den Namen ohnehin nennt ("sagt Lauren")
-  const named=eff!=='n'&&t.includes(NAME_OF[eff]);
-  S.full=(eff!=='n'&&quote&&!named?NAME_OF[eff]+': ':'')+txt;
-  S.col=COL_OF[eff]||COL_OF.n;
+  const swap=/["»“]\s*[—–-]\s*["»„]/.test(t);            // "…" — "…" = Dialogwechsel
+  const named=who!=='n'&&t.includes(NAME_OF[who]||' ');  // "sagt Lauren" = erzählt
+  const pure=who!=='n'&&quote&&!swap&&!named;
+  const eff=pure?who:'n';
+  S.who=eff;S.narr=(eff==='n');
+  S.full=(pure?NAME_OF[who]+': ':'')+txt;
+  S.col=COL_OF[eff];
   S.shown=0;S.typing=true;S.pause=0;
 }
 function beat(who,txt,list,hint){S.mood='neutral';S.moodT=0;line(who,txt);opts(list,hint);}
@@ -1643,21 +1731,24 @@ function feedback(sym,cringe){
 /* ---- Vorspiel am Handy: ihr Profil, dann der Chat, aus dem das Date entstand ---- */
 function introProfile(){
   S.mode='intro';S.scene='profile';S.intro={t0:performance.now()};
-  line('n','Donnerstag, 19:12. Du liest ihr Profil noch einmal, obwohl du es auswendig kannst.');
-  opts([
-    {t:'"Zwei Wahrheiten, eine Lüge." Du weißt bis heute nicht, welche.',go:introChat},
-    {t:'Zum Chat.',go:introChat}
-  ],'Ihr Profil bei Hinge');
+  line('n','Ihr Profil. Du kennst es auswendig.');
+  opts([{t:'Weiter.',go:introMatch}],'Hinge · vor sechs Tagen');
+}
+function introMatch(){
+  S.mode='intro';S.scene='match';S.intro={t0:performance.now()};
+  SFX.win();
+  line('n','Es hat gematcht.');
+  opts([{t:'Ihr schreiben.',go:introChat}],'Jetzt musst du was sagen');
 }
 function introChat(){
   S.mode='intro';S.scene='chat';S.intro={t0:performance.now(),all:false};
-  line('n','Euer Chat. Angefangen hat ihn eine Frage, die die App gestellt hat.');
-  opts([{t:'Weiterlesen.',go:introReady}],'Vor sechs Tagen');
+  line('n','Euer Chat.');
+  opts([{t:'Weiterlesen.',go:introReady}],'Deine erste Nachricht');
 }
 function introReady(){
   S.mode='intro';S.scene='chat';S.intro={t0:performance.now(),all:true};
-  line('n','Breathwork also: zwei Stunden liegen und schnell atmen, angeleitet, bis der Körper etwas macht, das er sonst nicht macht. Erstes Date. Kein Problem.');
-  opts([{t:'Jacke an, Rad aus dem Keller.',go:()=>{S.mode='talk';S.intro=null;SFX.page();talkBeat();}}],'19:40 · Zeit loszufahren');
+  line('n','19:40. Zeit loszufahren.');
+  opts([{t:'Jacke an, Rad raus.',go:()=>{S.mode='talk';S.intro=null;SFX.page();talkBeat();}}],'Heute Abend');
 }
 
 let ti=0;
@@ -1730,7 +1821,7 @@ function startWave(i){
   const w=WAVES[i];S.mode='play';S.pose='sit';
   S.run={wave:i,v:50,center:50,focus:w.need*0.55,hold:false,t0:performance.now(),
          band:w.band,speed:w.speed,need:w.need,drain:w.drain,rise:w.rise,fall:w.fall,inband:false};
-  line('n',w.name);S.col='#ffe066';
+  line('n',w.name);
   breathStart();SFX.start();
   opts([{t:'Atmen überspringen.',go:skipGauntlet}],BREATH_HINT);
 }
@@ -1744,7 +1835,6 @@ function waveWon(){
     S.sym+=4;
     S.breathRe=S.fails?'fought':'pure';
     line('n','Es wird still. Irgendwann sagt Jonas: "Kommt langsam zurück." Deine Hände sind warm. Du schaust zu Lauren. Sie schaut nicht zurück.');
-    S.col='#ffe066';
     opts([{t:'Zurückkommen.',go:leaveStudio}],'Alle drei Wellen geschafft');
   }
 }
@@ -1758,7 +1848,6 @@ function waveLost(){
     'Lauren, ohne die Augen zu öffnen: "Atme, nicht arbeite."'
   ];
   line('n',jokes[Math.min(jokes.length-1,S.fails-1)]+' Jonas: "Kein Problem. Nochmal."');
-  S.col='#ff9a7a';
   opts([
     {t:`Nochmal bei ${WAVES[i].name}.`,go:()=>startWave(i)},
     {t:'Atmen überspringen.',go:skipGauntlet}
@@ -1854,7 +1943,6 @@ function decision(){
 function noThanks(){
   SFX.endBad();react('scratch');
   line('l','"Okay." Pause. "Schade. Aber okay, passt."');
-  S.col='#f0b8c8';
   opts([{t:'…',go:()=>{
     line('n','Du sagst nichts mehr. Sie auch nicht. Ihr wartet zusammen auf ihre Tram, und das ist plötzlich sehr lang.');
     opts([{t:'Warten.',go:()=>startTram({yes:false,after:'"Mach\'s gut, Kevin." Sie steigt ein, ohne sich nochmal umzudrehen.',morning:'Am nächsten Morgen ist es einfach ein Donnerstag. Auch das ist eine Antwort.'})}],'Weiter');
@@ -1866,7 +1954,6 @@ function revealStep(n){
   if(n===1){
     tone(523.25,0.9,'sine',0.06);
     line('n','Ich fänds cool, wenn wir uns wieder sehen. (♫ "Ich könnt mich dran gewöhn dich öfters zu sehen..." ♫)');
-    S.col='#ffe066';
     return opts([{t:'…',go:()=>revealStep(2)}],'Jetzt isses raus.');
   }
   const score=S.sym-S.cringe*1.6+S.waves*1.4;
@@ -1897,7 +1984,6 @@ function revealStep(n){
 function startTram(cfg){
   S.mode='tram';S.tram={t0:performance.now(),cfg,done:false};S.phoneHand=false;
   line('n','Die Tram kommt um die Kurve.');
-  S.col='#dcdce8';
   opts([],'…  ('+(TOUCH?'Tipp':'Klick')+' ins Bild überspringt)');
   tone(220,1.4,'sawtooth',0.035,0,180);
 }
@@ -1909,12 +1995,11 @@ function tramDone(){
     ? 'Du stehst noch kurz da. Dann schließt du dein Rad auf.'
     : 'Es ist still. Du schließt dein Rad auf.';
   line('n',(cfg.after?cfg.after+' ':'')+rad);
-  S.col='#dcdce8';
   opts([{t:'Aufsteigen und heimfahren.',go:startRide}],'Dein Rad steht am Späti');
 }
 function startRide(){
   S.mode='ride';S.ride={t0:performance.now(),done:false};
-  line('n','');S.col='#dcdce8';
+  line('n','');
   opts([],'…');
   tone(120,0.5,'triangle',0.05,0,90);tone(300,0.25,'sine',0.03,0.1);   // Motor zu, Anfahren
 }
@@ -1928,7 +2013,6 @@ function endStep(){
     tone(1568,0.12,'sine',0.055,1.1);tone(2093,0.35,'sine',0.05,1.22);   // Nachrichten-Ding
   }
   line('n',cfg.morning||'Am nächsten Morgen schaust du als Erstes aufs Handy. Da ist nichts. Es ist okay.');
-  S.col=cfg.yes?'#ffe066':'#ff9a7a';
   opts([{t:'Nochmal. Anderer Abend.',go:reset}],cfg.yes?'Ihr seht euch wieder':'Ihr seht euch nicht wieder');
 }
 
@@ -2187,7 +2271,7 @@ function frame(t){
     if($say.style.color!==S.col)$say.style.color=S.col;
     // Schriftgröße am VOLLTEXT festmachen — sonst schrumpft sie mitten im Tippen
     const fl=(S.full||'').length;
-    const cls=fl>250?'xl':fl>190?'long':fl>130?'mid':'';
+    const cls=(fl>250?'xl':fl>190?'long':fl>130?'mid':'')+(S.narr?' narr':'');
     if($say.className!==cls)$say.className=cls;
   }else{
     const ax=S.who==='l'?(S._lx||W/2)+48:S.who==='k'?(S._kx||W/2)+48:S.who==='j'?280:W/2;

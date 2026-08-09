@@ -40,7 +40,7 @@
   /* Titelbild: eigenes Key-Art, am Handy bildschirmfüllend */
   #title{position:fixed;inset:0;background:#080418;display:none;align-items:center;justify-content:center;z-index:9;cursor:pointer}
   #title.on{display:flex}
-  #tc{height:100%;width:auto;max-width:100%;image-rendering:pixelated;display:block}
+  #tc{width:100%;height:100%;display:block}
   /* Das Handy im Vorspiel: echtes HTML, damit die Schrift scharf bleibt */
   #phone{display:none;background:#07060f;border:2px solid #16162a;border-bottom:none;padding:14px 0 10px;justify-content:center}
   #phone.on{display:flex}
@@ -51,27 +51,27 @@
   #phone .bar #phtitle{color:#f0b8c8;font-weight:700}
   #phone .body{background:#0b0f18;border-radius:14px;padding:10px;min-height:300px}
   #phone .pic{width:100%;height:200px;object-fit:cover;object-position:center 18%;border-radius:10px;display:block;background:#4a3a72}
-  #phone .nm{font-size:19px;font-weight:700;color:#f0b8c8;margin:9px 0 2px}
-  #phone .sub{font-size:14px;color:#e8eaf0;margin-bottom:2px}
+  #phone .nm{font-size:21px;font-weight:700;color:#f0b8c8;margin:10px 0 2px;letter-spacing:.5px}
+  #phone .sub{font-size:15px;color:#e8eaf0;margin-bottom:3px;font-family:'Avenir Next',Avenir,'Segoe UI',system-ui,sans-serif}
   #phone .loc{font-size:13px;color:#8fe6d2;margin-bottom:9px}
   #phone .prompt{background:#182233;border-radius:10px;padding:8px 10px;margin-bottom:8px}
   #phone .prompt b{display:block;font-size:12px;color:#7f9ad0;font-weight:700;margin-bottom:3px;letter-spacing:.3px}
-  #phone .prompt span{font-size:15px;color:#e8eaf0;line-height:1.35}
-  #phone .bub{max-width:78%;padding:8px 11px;border-radius:14px;margin-bottom:8px;font-size:15px;line-height:1.35;
-              word-wrap:break-word}
+  #phone .prompt span{font-size:15.5px;color:#e8eaf0;line-height:1.42;font-family:'Avenir Next',Avenir,'Segoe UI',system-ui,sans-serif;letter-spacing:.1px}
+  #phone .bub{max-width:78%;padding:9px 12px;border-radius:14px;margin-bottom:8px;font-size:15.5px;line-height:1.4;
+              word-wrap:break-word;font-family:'Avenir Next',Avenir,'Segoe UI',system-ui,sans-serif;letter-spacing:.1px}
   #phone .bub.her{background:#242b3a;color:#e8eaf0;border-bottom-left-radius:4px}
   #phone .bub.me{background:#1f4f8a;color:#dceaff;margin-left:auto;border-bottom-right-radius:4px}
   #phone .who{font-size:11px;color:#8b93a7;letter-spacing:.4px;margin:0 4px 2px}
   #phone .who.me{text-align:right}
   #phone .match{text-align:center;padding:6px 0 2px;
                 background:linear-gradient(#6a1f48,#a83a63);border-radius:12px}
-  #phone .match h2{font-size:26px;line-height:1.05;color:#ffe066;margin:12px 0 4px;
+  #phone .match h2{font-size:27px;line-height:1.05;color:#ffe066;margin:12px 0 4px;
                    text-shadow:2px 2px 0 #2a0c1e;letter-spacing:1px}
   #phone .match .pair{display:flex;justify-content:center;gap:10px;margin:12px 0 6px}
   #phone .match .pair figure{margin:0}
   #phone .match .pair img{width:96px;height:96px;border-radius:50%;border:3px solid #fff;background:#4a3a72;display:block}
   #phone .match .pair figcaption{font-size:12px;color:#ffe9f2;margin-top:5px}
-  #phone .match p{font-size:15px;color:#ffd9e6;margin:6px 0 12px}
+  #phone .match p{font-size:15.5px;font-family:'Avenir Next',Avenir,'Segoe UI',system-ui,sans-serif;color:#ffd9e6;margin:6px 0 12px}
   #phone .match .btn{background:#fff;color:#a83a63;font-weight:700;font-size:14px;border-radius:10px;
                      padding:11px 0;margin:0 14px 14px;letter-spacing:.6px}
   @media (max-width:700px){
@@ -130,83 +130,97 @@ const $ch=document.getElementById('choices'),$hint=document.getElementById('hint
 const tcv=document.getElementById('tc'), tx=tcv.getContext('2d');
 tx.imageSmoothingEnabled=false;
 const $title=document.getElementById('title');
+function fitTitleCanvas(){
+  const w=Math.max(320,Math.min(1600,Math.round(innerWidth))),
+        h=Math.max(320,Math.min(1000,Math.round(innerHeight)));
+  if(tcv.width!==w||tcv.height!==h){tcv.width=w;tcv.height=h;tx.imageSmoothingEnabled=false;}
+}
+addEventListener('resize',fitTitleCanvas);
+
 function drawTitleArt(t){
-  const TW=tcv.width, TH=tcv.height, c=tx;
+  fitTitleCanvas();
+  const TW=tcv.width, TH=tcv.height, c=tx, wide=TW/TH>1.2;
   const R=(x,y,w,h,col)=>{c.fillStyle=col;c.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h));};
   const P=(pts,col)=>{c.fillStyle=col;c.beginPath();c.moveTo(pts[0][0],pts[0][1]);
     for(let i=1;i<pts.length;i++)c.lineTo(pts[i][0],pts[i][1]);c.closePath();c.fill();};
-  // Nachthimmel
-  const g=c.createLinearGradient(0,0,0,TH*0.66);
+  const U=Math.min(TW,TH)/700;                       // eine Einheit, damit alles mitwächst
+  const sky=TH*(wide?0.70:0.60);                     // Horizontlinie
+  // Himmel
+  const g=c.createLinearGradient(0,0,0,sky);
   g.addColorStop(0,'#150c34');g.addColorStop(0.5,'#1e1552');g.addColorStop(1,'#33246f');
-  c.fillStyle=g;c.fillRect(0,0,TW,TH*0.66);
-  for(let i=0;i<170;i++){
-    const sx=(i*67)%TW, sy=(i*151)%Math.round(TH*0.55), tw=0.5+0.5*Math.sin(t/700+i);
-    R(sx,sy,2,2,`rgba(255,244,214,${0.16+tw*0.5})`);
+  c.fillStyle=g;c.fillRect(0,0,TW,sky);
+  for(let i=0;i<260;i++){
+    const sx=(i*137)%TW, sy=(i*89)%Math.round(sky*0.92), tw=0.5+0.5*Math.sin(t/700+i);
+    R(sx,sy,2,2,`rgba(255,244,214,${0.14+tw*0.5})`);
   }
-  for(let i=0;i<12;i++)R((i*97)%TW-60,26+i*24,TW*0.6,5,'rgba(96,74,158,0.14)');
+  for(let i=0;i<14;i++)R((i*197)%TW-80,26+i*(sky/16),TW*0.55,4,'rgba(96,74,158,0.13)');
   // Mond
-  const mx=TW*0.70,my=TH*0.34;
-  c.fillStyle='rgba(255,236,170,0.09)';c.beginPath();c.arc(mx,my,46,0,7);c.fill();
-  c.fillStyle='rgba(255,240,190,0.15)';c.beginPath();c.arc(mx,my,25,0,7);c.fill();
-  c.fillStyle='#ffeaa0';c.beginPath();c.arc(mx,my,14,0,7);c.fill();
-  // Stadt am Horizont
-  const sky=TH*0.60;
-  for(const[hx,hw,hh]of [[40,64,104],[96,44,74],[136,54,128],[186,38,88],[220,60,112],[276,40,72],[310,54,104]]){
-    R(hx,sky-hh,hw,hh,'#160f36');
-    for(let wy=sky-hh+12;wy<sky-10;wy+=15)for(let wx=hx+7;wx<hx+hw-8;wx+=12)
-      if(((wx*5+wy*11)%7)<3)R(wx,wy,4,6,'rgba(240,196,110,0.8)');
+  const mx=TW*(wide?0.62:0.70), my=sky*0.26;
+  c.fillStyle='rgba(255,236,170,0.09)';c.beginPath();c.arc(mx,my,58*U,0,7);c.fill();
+  c.fillStyle='rgba(255,240,190,0.15)';c.beginPath();c.arc(mx,my,32*U,0,7);c.fill();
+  c.fillStyle='#ffeaa0';c.beginPath();c.arc(mx,my,17*U,0,7);c.fill();
+  // Skyline
+  const cityL=TW*(wide?0.26:0.09), cityW=TW*(wide?0.70:0.82);
+  const blocks=[[0.00,0.15,0.30],[0.13,0.11,0.21],[0.24,0.13,0.36],[0.36,0.09,0.25],[0.45,0.14,0.32],
+                [0.59,0.10,0.20],[0.68,0.13,0.30],[0.80,0.11,0.24],[0.90,0.10,0.34]];
+  for(const[bx,bw,bh]of blocks){
+    const x=cityL+bx*cityW, w=bw*cityW, h=bh*sky;
+    R(x,sky-h,w,h,'#160f36');
+    for(let wy=sky-h+14*U;wy<sky-12*U;wy+=17*U)for(let wx=x+8*U;wx<x+w-10*U;wx+=14*U)
+      if(((Math.round(wx)*5+Math.round(wy)*11)%7)<3)R(wx,wy,5*U,7*U,'rgba(240,196,110,0.8)');
   }
-  // Der Atem-Raum: Leuchtfenster mittig, Kegel auf den nassen Asphalt
-  R(TW*0.40,sky-92,TW*0.22,92,'#241a4c');
-  R(TW*0.415,sky-78,TW*0.19,54,'#f4c268');
-  R(TW*0.415,sky-78,TW*0.19,7,'#ffe9b0');
-  R(TW*0.40,sky-100,TW*0.22,10,'#181040');
-  P([[TW*0.40,sky-24],[TW*0.62,sky-24],[TW*0.90,TH],[TW*0.14,TH]],'rgba(255,206,120,0.17)');
-  // Boden + Spiegelung
+  // Der Atem-Raum
+  const stW=TW*(wide?0.13:0.24), stX=TW*(wide?0.44:0.38), stH=sky*0.26;
+  R(stX,sky-stH,stW,stH,'#241a4c');
+  R(stX+stW*0.07,sky-stH*0.82,stW*0.86,stH*0.55,'#f4c268');
+  R(stX+stW*0.07,sky-stH*0.82,stW*0.86,stH*0.08,'#ffe9b0');
+  R(stX,sky-stH-8*U,stW,9*U,'#181040');
+  P([[stX,sky-2],[stX+stW,sky-2],[stX+stW*2.4,TH],[stX-stW*1.4,TH]],'rgba(255,206,120,0.16)');
+  // Boden
   const gr=c.createLinearGradient(0,sky,0,TH);
   gr.addColorStop(0,'#241b46');gr.addColorStop(1,'#100b26');
   c.fillStyle=gr;c.fillRect(0,sky,TW,TH-sky);
-  for(let i=0;i<34;i++){
-    const ry=sky+10+i*8, rw=8+((i*13)%22), rx=TW*0.50+Math.sin(i*0.7)*22-rw/2;
+  R(0,sky,TW,3,'#463a7e');
+  for(let x=-TW*0.2;x<=TW*1.2;x+=TW*0.09){
+    const fx0=TW*0.5+(x-TW*0.5)*0.55;
+    P([[x,TH],[x+5,TH],[fx0+3,sky+5],[fx0,sky+5]],'rgba(12,8,32,0.5)');
+  }
+  for(let i=0;i<40;i++){
+    const ry=sky+10+i*((TH-sky)/40), rw=(10+((i*13)%26))*U, rx=stX+stW/2+Math.sin(i*0.7)*30*U-rw/2;
     R(rx,ry,rw,2,`rgba(255,214,140,${0.05+((i*7)%4)/34})`);
   }
-  // Gehweg mit Fluchtfugen, damit der Boden trägt
-  for(let x=-40;x<=TW+40;x+=54){
-    const fx0=TW*0.5+(x-TW*0.5)*0.55;
-    P([[x,TH],[x+5,TH],[fx0+3,sky+6],[fx0,sky+6]],'rgba(12,8,32,0.5)');
+  // Blattwerk-Rahmen
+  const fr=Math.round(26*U);
+  R(0,0,fr,TH,'#0a0620');R(TW-fr,0,fr,TH,'#0a0620');
+  const step=Math.round(40*U);
+  for(let i=0;i*step<TH+step;i++){
+    const y=i*step-8, d1=(10+((i*37)%16))*U, d2=(9+((i*53)%18))*U;
+    P([[fr,y],[fr+d1,y+step*0.22],[fr+d1*0.6,y+step*0.5],[fr+d1*0.95,y+step*0.78],[fr,y+step]],'#0a0620');
+    P([[TW-fr,y+step*0.25],[TW-fr-d2,y+step*0.48],[TW-fr-d2*0.55,y+step*0.72],[TW-fr-d2*0.9,y+step*0.98],[TW-fr,y+step*1.2]],'#0a0620');
   }
-  R(0,sky,TW,3,'#463a7e');
-  // Dunkler Rahmen: unregelmäßiges Blattwerk, nur an den Rändern
-  R(0,0,26,TH,'#0a0620');R(TW-24,0,24,TH,'#0a0620');
-  for(let i=0;i<18;i++){
-    const y=i*40-8, d1=10+((i*37)%16), d2=9+((i*53)%18);
-    P([[26,y],[26+d1,y+9],[26+d1*0.6,y+20],[26+d1*0.95,y+31],[26,y+40]],'#0a0620');
-    P([[TW-24,y+10],[TW-24-d2,y+19],[TW-24-d2*0.55,y+29],[TW-24-d2*0.9,y+39],[TW-24,y+48]],'#0a0620');
-  }
-  // Lauren im Vordergrund links
-  const lsc=3.1, lTop=TH-89*lsc-6;
-  c.save();c.translate(TW*0.13,lTop);c.scale(lsc,lsc);
+  // Lauren im Vordergrund
+  const lsc=(TH*(wide?0.62:0.42))/89, lTop=TH-89*lsc-6*U;
+  c.save();c.translate(TW*(wide?0.70:0.14),lTop);c.scale(lsc,lsc);
   const oldCtx=CTX();SETCTX(c);
-  figure(0,0,1,LAUREN,t,0.5+0.5*Math.sin(t/1500),false,0.9,false,'neutral',0,false,false,null,1,false);
+  figure(0,0,1,LAUREN,t,0.5+0.5*Math.sin(t/1500),false,0.9,false,'neutral',0,false,false,null,wide?-1:1,false);
   SETCTX(oldCtx);c.restore();
   // ---------- Typografie ----------
-  const LEFT=64, MAXW=TW-LEFT-34;
+  const LEFT=Math.round(TW*(wide?0.09:0.15)), MAXW=TW*(wide?0.52:0.78);
   c.textBaseline='top';c.textAlign='left';
-  const fit=(str,px0,weight)=>{                       // Größe so wählen, dass es reinpasst
-    let px=px0;
+  const fit=(str,start,weight)=>{let px=start;
     do{c.font=weight+' '+px+'px Georgia,"Times New Roman",serif';px-=1;}
-    while(c.measureText(str).width>MAXW&&px>12);
-    return px+1;
-  };
-  // Klammer links
-  R(30,58,8,300,'#f6e06a');R(30,58,30,8,'#f6e06a');R(30,350,30,8,'#f6e06a');
+    while(c.measureText(str).width>MAXW&&px>10);return px+1;};
+  const topY=Math.round(TH*(wide?0.08:0.09));
+  // Klammer
+  const brT=topY-14*U, brH=TH*(wide?0.34:0.40), brX=LEFT-30*U;
+  R(brX,brT,8*U,brH,'#f6e06a');R(brX,brT,30*U,8*U,'#f6e06a');R(brX,brT+brH-8*U,30*U,8*U,'#f6e06a');
   const s0='Ich will atmen lernen';
-  const p0=fit(s0,25,'700');
+  const p0=fit(s0,Math.round(34*U*1.4),'700');
   c.font='700 '+p0+'px Georgia,"Times New Roman",serif';
-  c.fillStyle='#120a24';c.fillText(s0,LEFT+2,68+2);
-  c.fillStyle='#fdf6e0';c.fillText(s0,LEFT,68);
+  c.fillStyle='#120a24';c.fillText(s0,LEFT+2,topY+2);
+  c.fillStyle='#fdf6e0';c.fillText(s0,LEFT,topY);
   const big=(str,y)=>{
-    const px=fit(str,86,'700');
+    const px=fit(str,Math.round(120*U*1.4),'700');
     c.font='700 '+px+'px Georgia,"Times New Roman",serif';
     c.lineJoin='round';
     c.strokeStyle='#0d0722';c.lineWidth=px*0.16;c.strokeText(str,LEFT,y);
@@ -215,20 +229,23 @@ function drawTitleArt(t){
     c.fillStyle=lg;c.fillText(str,LEFT,y);
     return px;
   };
-  const h1=big('EIN DATE',102);
-  big('MIT LAUREN',102+h1*0.96);
+  const y1=topY+p0*1.35;
+  const h1=big('EIN DATE',y1);
+  big('MIT LAUREN',y1+h1*0.96);
   const s3='frei nach einer wahren Verabredung';
-  const p3=fit(s3,16,'700');
+  const p3=fit(s3,Math.round(22*U*1.4),'700');
   c.font='700 '+p3+'px Georgia,"Times New Roman",serif';
-  c.fillStyle='#120a24';c.fillText(s3,LEFT+1,102+h1*2.02+1);
-  c.fillStyle='#f6e06a';c.fillText(s3,LEFT,102+h1*2.02);
+  const y3=y1+h1*2.06;
+  c.fillStyle='#120a24';c.fillText(s3,LEFT+1,y3+1);
+  c.fillStyle='#f6e06a';c.fillText(s3,LEFT,y3);
   // Startaufforderung
   if(Math.sin(t/380)>0){
-    c.font='700 19px Georgia,"Times New Roman",serif';
+    const fs=Math.max(14,Math.round(24*U));
+    c.font='700 '+fs+'px Georgia,"Times New Roman",serif';
     const s4=(TOUCH?'Tippen':'Klicken')+', um anzufangen';
     const w=c.measureText(s4).width;
-    c.fillStyle='rgba(8,4,20,0.75)';c.fillRect(TW/2-w/2-16,TH-70,w+32,34);
-    c.fillStyle='#fdf6e0';c.fillText(s4,TW/2-w/2,TH-62);
+    c.fillStyle='rgba(8,4,20,0.75)';c.fillRect(TW/2-w/2-16,TH-fs*3.4,w+32,fs*1.8);
+    c.fillStyle='#fdf6e0';c.fillText(s4,TW/2-w/2,TH-fs*3.0);
   }
 }
 
@@ -1715,6 +1732,11 @@ function phoneShow(screen){
     }).join('');
   }
 }
+document.getElementById('phone').addEventListener('pointerdown',e=>{
+  e.preventDefault();audioInit();
+  if(S.typing){skipTyping();return;}
+  if(S.pending&&S.pending.length===1){const only=S.pending[0];S.pending=null;$ch.innerHTML='';only.go();}
+});
 function phoneHide(){$phone.classList.remove('on');$phone.hidden=true;cv.style.display='';}
 
 const SCENE={front:sceneFront,studio:sceneStudio,street:sceneStreet,title:sceneTitle};
@@ -1822,7 +1844,7 @@ const RAW=[
  ],after:()=>{S.barGiven=true;}},
  {sc:'studio',who:'n',txt:'Drinnen. SCHUHE AUS steht an der Wand. Sie steckt den Riegelrest weg und ist schon raus aus ihren Schuhen. Deine Cap bleibt auf. Niemand sagt etwas. Alle denken es.',hint:'Die Socken-Frage',o:[
    ['"Ich hab extra Socken ohne Löcher angezogen."',1,0,'l','Sie: "Extra für misch?" Du: "Für den Raum." Sie: "Für den Raum. Bien sûr."'],
-   ['Ein Loch ist da. Sie sieht es.',1,1,'l','"Das ist ein Fenster", sagt sie. "Damit der Zeh was sieht." Pause. "Das war ein Vers, den nehm isch mit."'],
+   ['Du ziehst die Schuhe aus. Im rechten Socken: ein Loch.',1,1,'l','Sie schaut drauf, ganz ohne Spott. "Das ist kein Loch. Das ist ein Fenster — damit der Zeh was sieht." Dann, zu sich selbst: "Den Satz nehm isch mit."',()=>{S.vers=true;}],
    ['"Ich bin barfuß eigentlich ein anderer Mensch."',2,0,'l','"Zeig mir den Menschen."'],
    ['"Riechst du das auch?"',0,3,'l','"Oui."']
  ]},
@@ -1865,14 +1887,9 @@ function introMatch(){
   opts([{t:'Ihr schreiben.',go:introChat}],'Es hat gematcht');
 }
 function introChat(){
-  S.mode='intro';S.intro={t0:performance.now(),all:false};phoneShow('chat');
-  line('n','Deine erste Nachricht. Sie antwortet nach vier Minuten.');
-  opts([{t:'Weiterlesen.',go:introReady}],'Euer Chat');
-}
-function introReady(){
   S.mode='intro';S.intro={t0:performance.now(),all:true};phoneShow('chat');
-  line('n','19:40. Zeit loszufahren.');
-  opts([{t:'Jacke an, Rad raus.',go:()=>{phoneHide();S.mode='talk';S.intro=null;SFX.page();talkBeat();}}],'Heute Abend');
+  line('n','Euer Chat. Danach war Donnerstag.');
+  opts([{t:'Jacke an, Rad raus.',go:()=>{phoneHide();S.mode='talk';S.intro=null;SFX.page();talkBeat();}}],'19:40 · Zeit loszufahren');
 }
 
 let ti=0;
@@ -1885,6 +1902,7 @@ function talkBeat(){
   S.riegel=(b.sc==='front'&&!!S.barGiven);
   beat(b.who,b.txt,b.o.map(o=>({t:o[0],go:()=>{
     S.sym+=o[1];S.cringe+=o[2];
+    if(typeof o[5]==='function')o[5]();
     feedback(o[1],o[2]);
     if(b.after){b.after();S.kbar=false;S.riegel=(b.sc==='front');}
     line(o[3],o[4]);
@@ -1988,6 +2006,10 @@ const down=e=>{
     if(e&&e.cancelable)e.preventDefault();return;}
   if(S.mode==='play'&&S.run){S.run.hold=true;skipTyping();if(e&&e.cancelable)e.preventDefault();return;}
   if(skipTyping()){if(e&&e.cancelable)e.preventDefault();return;}
+  // Ein Klick ins Bild reicht, solange es nur einen Weg weiter gibt
+  if(S.pending&&S.pending.length===1&&!S.typing){
+    const only=S.pending[0];S.pending=null;$ch.innerHTML='';only.go();
+  }
   if(e&&e.cancelable)e.preventDefault();
 };
 const up=()=>{if(S.run)S.run.hold=false;clearSel();};
@@ -2077,14 +2099,18 @@ function noThanks(){
 function revealStep(n){
   if(n===1){
     tone(523.25,0.9,'sine',0.06);
-    line('n','Ich fänds cool, wenn wir uns wieder sehen. (♫ "Ich könnt mich dran gewöhn dich öfters zu sehen..." ♫)');
-    return opts([{t:'(weiter)',go:()=>revealStep(2)}],'Jetzt isses raus.');
+    line('k','"Ich fänd\'s cool, wenn wir uns wiedersehen."');
+    S.autoNext=null;
+    return opts([{t:'(weiter)',go:()=>{
+      line('n','Irgendwo in deinem Kopf läuft dazu Musik. ♫ "Ich könnt mich dran gewöhn, dich öfters zu sehen…" ♫');
+      opts([{t:'(weiter)',go:()=>revealStep(2)}],'Jetzt isses raus');
+    }}],'Du sagst es einfach');
   }
   const score=S.sym-S.cringe*1.6+S.waves*1.4;
   if(score>=14){
     SFX.end();react('laugh');S.phoneHand=true;
     line('l','"Warte." Sie dreht dir ihr Handy hin. Du tippst deine Nummer ein.');
-    opts([{t:'"Ja cool."',go:()=>{rk('good');line('l','"Samstag. Du bringst die Riegel — du weißt ja inzwischen, wo es sie nisch gibt. Isch bringe die Spezi. Und komm mit dem Rad."');
+    opts([{t:'"Ja cool."',go:()=>{rk('good');line('l','"Samstag. Du bringst die Riegel, isch bringe die Spezi. Und komm mit dem Rad."');
       opts([{t:'(weiter)',go:()=>startTram({yes:true,msg:'Samstag? — habe es endlisch abgeschickt. Riegel: du. Spezi: isch. E-Bike: nisch vergessen. ✦',after:'Sie winkt durch die Scheibe, mit beiden Händen, wie ein Kind.',morning:'Ihre Nachricht liest du erst am Morgen.'})}],'Ihre Tram kommt');}}],'Sie hatte es schon getippt');
   }else if(score>=8){
     SFX.end();react('laugh');
@@ -2099,7 +2125,9 @@ function revealStep(n){
   }else{
     SFX.endBad();react('roll');
     line('l','"Kevin." Sie sagt deinen Namen so, wie man einen Satz beendet. "Du bist lieb. Aber isch will das nisch nochmal, glaub isch."');
-    opts([{t:'"Okay."',go:()=>{line('l','"Okay." Sie nickt einmal. Dann, fast versöhnlich: "Den Vers mit dem Zeh und dem Fenster behalte isch trotzdem. Der kommt in ein Gedicht. Du wirst nisch erwähnt."');
+    opts([{t:'"Okay."',go:()=>{line('l',S.vers
+        ? '"Okay." Sie nickt einmal. Dann, fast versöhnlich: "Das mit dem Fenster und dem Zeh behalte isch trotzdem. Das kommt in ein Gedicht. Du wirst nisch erwähnt."'
+        : '"Okay." Sie nickt einmal. Dann, fast versöhnlich: "Der Abend kommt trotzdem in ein Gedicht. Du wirst nisch erwähnt."');
       opts([{t:'(weiter)',go:()=>startTram({yes:false,after:'Sie steigt ein. Durch die Scheibe schaut sie noch kurz auf ihr Handy, nicht zu dir. Es ist nicht böse gemeint. Es ist nur zu Ende.',morning:'Am nächsten Morgen denkst du kurz an sie, dann an Frühstück. In dieser Reihenfolge.'})}],'Ihre Tram kommt');}}],'Sie sagt es klar');
   }
 }
@@ -2177,7 +2205,7 @@ function reset(){
   S.scene='title';S.cringe=0;S.sym=0;S.fails=0;S.waves=0;S.jonas=false;
   S.pose='stand';S.mode='talk';S.run=null;ti=0;breathStop();
   S.tram=null;S.gone=false;S.mood='neutral';S.moodT=0;S.moodStart=0;
-  S.breathRe=null;S.riegel=false;S.kbar=false;S.barGiven=false;S.bottle=false;S.teary=false;
+  S.vers=false;S.breathRe=null;S.riegel=false;S.kbar=false;S.barGiven=false;S.bottle=false;S.teary=false;
   S.cringeWarned=false;S.phone=null;S.bed=false;S.ride=null;S.autoNext=null;S.autoT=0;S.who='n';S.phoneHand=false;
   S.mode='title';S.full='';S.typing=false;
   opts([],'Ein Abend in München — '+(TOUCH?'tipp':'klick')+' ins Bild');

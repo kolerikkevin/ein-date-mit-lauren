@@ -171,8 +171,69 @@ function drawBG(img,anchor){
   }
   px(0,0,W,H,'#140e28');return false;
 }
-const PORTRAIT_L='bilder/portrait-lauren.jpg';
-const PORTRAIT_K='bilder/portrait-kevin.jpg';
+/* ================= Malschicht für alles Gezeichnete =================
+   Die Figuren sollen lustig bleiben — aber nicht wie Vektor-Sticker vor einem
+   gemalten Raum kleben. Also laufen Figuren, Requisiten, Tram und Rad durch ein
+   halb so großes Offscreen-Canvas und werden ungeglättet hochgezogen: dieselbe
+   Pixelkörnung wie im Hintergrund. Danach kommt das Licht des Raums drauf. */
+const CVX=cv.getContext('2d');
+const FGS=0.8;                 // feiner als 0.5 — sonst zerfallen die Augen zu Ringen
+const fgc=document.createElement('canvas');
+fgc.width=Math.round(W*FGS);fgc.height=Math.round(H*FGS);
+const fgx=fgc.getContext('2d');
+const mkc=document.createElement('canvas');
+mkc.width=fgc.width;mkc.height=fgc.height;
+const mkx=mkc.getContext('2d');
+let fgOn=false;
+/* Korn: einmal erzeugt, liegt als Muster nur auf den Figuren */
+const grainC=document.createElement('canvas');grainC.width=grainC.height=64;
+(()=>{const g=grainC.getContext('2d'),d=g.createImageData(64,64);
+  for(let i=0;i<d.data.length;i+=4){const v=120+((i*2654435761>>>13)%110);
+    d.data[i]=d.data[i+1]=d.data[i+2]=v;d.data[i+3]=255;}
+  g.putImageData(d,0,0);})();
+let grainPat=null;
+/* Lichtstimmung je Szene — dieselben Quellen wie im gemalten Bild */
+const FGLIGHT={
+  studio:{shade:'rgba(52,32,80,0.20)',warm:'rgba(255,168,72,0.26)',x:0.50,y:0.42,r:0.55},
+  street:{shade:'rgba(40,30,72,0.24)',warm:'rgba(255,190,104,0.26)',x:0.22,y:0.52,r:0.50},
+  front :{shade:'rgba(44,32,84,0.22)',warm:'rgba(255,180,88,0.28)',x:0.60,y:0.52,r:0.52},
+  def   :{shade:'rgba(44,32,80,0.16)',warm:'rgba(255,190,110,0.20)',x:0.50,y:0.50,r:0.60}
+};
+function fgBegin(){
+  if(fgOn)return;
+  fgx.setTransform(1,0,0,1,0,0);
+  fgx.clearRect(0,0,fgc.width,fgc.height);
+  fgx.scale(FGS,FGS);
+  fgx.imageSmoothingEnabled=false;
+  SETCTX(fgx);fgOn=true;
+}
+function fgEnd(scene){
+  if(!fgOn)return;
+  SETCTX(CVX);fgOn=false;
+  const L=FGLIGHT[scene]||FGLIGHT.def, fw=fgc.width, fh=fgc.height;
+  fgx.setTransform(1,0,0,1,0,0);
+  fgx.save();
+  fgx.globalCompositeOperation='source-atop';      // färbt nur, wo wirklich jemand steht
+  fgx.fillStyle=L.shade;fgx.fillRect(0,0,fw,fh);
+  const g=fgx.createRadialGradient(fw*L.x,fh*L.y,3,fw*L.x,fh*L.y,fw*L.r);
+  g.addColorStop(0,L.warm);g.addColorStop(1,'rgba(255,190,110,0)');
+  fgx.fillStyle=g;fgx.fillRect(0,0,fw,fh);
+  fgx.restore();
+  // Korn: overlay füllt die ganze Fläche, darum vorher die Silhouette sichern
+  // und hinterher wieder darauf zurückschneiden.
+  if(!grainPat)grainPat=fgx.createPattern(grainC,'repeat');
+  mkx.setTransform(1,0,0,1,0,0);
+  mkx.globalCompositeOperation='copy';mkx.drawImage(fgc,0,0);
+  fgx.save();
+  fgx.globalCompositeOperation='overlay';fgx.globalAlpha=0.20;
+  fgx.fillStyle=grainPat;fgx.fillRect(0,0,fw,fh);
+  fgx.globalAlpha=1;
+  fgx.globalCompositeOperation='destination-in';fgx.drawImage(mkc,0,0);
+  fgx.restore();
+  const sm=ctx.imageSmoothingEnabled;ctx.imageSmoothingEnabled=false;
+  ctx.drawImage(fgc,0,0,W,H);
+  ctx.imageSmoothingEnabled=sm;
+}
 const coverH=new Image(),coverQ=new Image();
 coverH.src=COVER_HOCH;coverQ.src=COVER_QUER;
 function fitTitleCanvas(){
@@ -1230,9 +1291,7 @@ function rug(cx,yTop,wTop,yBot,wBot){
 function sceneFront(t){
   drawBG(bgFront,0.55);
   starsIn(t,0,320,0,30,150);
-  PS=1.5;
-  drawEBike(0,0,1,0,true);      // Kevins E-Bike, abgestellt — er ist damit gekommen
-  PS=1;
+  PS=1;                         // das Rad zeichnet die Malschicht (siehe frame)
 }
 
 /* Kevins E-Bike — in Szenen-Einheiten, wiederverwendbar (abgestellt oder fahrend) */
@@ -1245,16 +1304,16 @@ function drawEBike(dx,dy,sc,roll,lamp){
   ctx.beginPath();ctx.arc(w1,bY,R,0,7);ctx.stroke();
   ctx.beginPath();ctx.arc(w2,bY,R,0,7);ctx.stroke();
   // Felgen + ein paar Speichen
-  ctx.strokeStyle='#6b6490';ctx.lineWidth=1;
+  ctx.strokeStyle='#4a4568';ctx.lineWidth=1;
   ctx.beginPath();ctx.arc(w1,bY,R-2.8,0,7);ctx.stroke();
   ctx.beginPath();ctx.arc(w2,bY,R-2.8,0,7);ctx.stroke();
-  ctx.strokeStyle='rgba(140,134,180,0.5)';ctx.lineWidth=0.5;
+  ctx.strokeStyle='rgba(120,116,158,0.42)';ctx.lineWidth=0.5;
   for(let a=0;a<6;a++){const an=a*Math.PI/3+(roll||0);
     ctx.beginPath();ctx.moveTo(w1,bY);ctx.lineTo(w1+Math.cos(an)*(R-3),bY+Math.sin(an)*(R-3));ctx.stroke();
     ctx.beginPath();ctx.moveTo(w2,bY);ctx.lineTo(w2+Math.cos(an)*(R-3),bY+Math.sin(an)*(R-3));ctx.stroke();}
   // Rahmen (Tiefeinsteiger, wie ein Trekking-E-Bike)
   const bb={x:44,y:158};            // Tretlager
-  ctx.strokeStyle='#3d7ba6';ctx.lineWidth=3;
+  ctx.strokeStyle='#2f8079';ctx.lineWidth=3;
   ctx.beginPath();ctx.moveTo(24,141);ctx.lineTo(bb.x,bb.y);ctx.stroke();          // Unterrohr, tief eingezogen
   ctx.beginPath();ctx.moveTo(bb.x,bb.y);ctx.lineTo(56,140);ctx.stroke();          // Sattelrohr
   ctx.beginPath();ctx.moveTo(24,141);ctx.lineTo(56,140);ctx.stroke();             // Oberrohr
@@ -1271,7 +1330,7 @@ function drawEBike(dx,dy,sc,roll,lamp){
   ctx.strokeStyle='#8c93b4';ctx.lineWidth=1.4;
   ctx.beginPath();ctx.moveTo(bb.x,bb.y);ctx.lineTo(bb.x+5,bb.y+4);ctx.stroke();
   // Gabel + Steuerrohr
-  ctx.strokeStyle='#3d7ba6';ctx.lineWidth=2.6;
+  ctx.strokeStyle='#2f8079';ctx.lineWidth=2.6;
   ctx.beginPath();ctx.moveTo(w1,bY);ctx.lineTo(24,141);ctx.stroke();
   ctx.beginPath();ctx.moveTo(24,141);ctx.lineTo(26,134);ctx.stroke();
   // Lenker mit Griffen + Display
@@ -1298,9 +1357,11 @@ function drawEBike(dx,dy,sc,roll,lamp){
     ctx.beginPath();ctx.moveTo(18,140);ctx.lineTo(0,164);ctx.lineTo(0,178);ctx.lineTo(21,168);ctx.closePath();ctx.fill();
   }
   // Schatten unter den Rädern
-  ctx.fillStyle='rgba(10,6,20,0.30)';
-  ctx.beginPath();ctx.ellipse(w1,bY+11,8,2.2,0,0,7);ctx.fill();
-  ctx.beginPath();ctx.ellipse(w2,bY+11,8,2.2,0,0,7);ctx.fill();
+  ctx.fillStyle='rgba(8,5,16,0.50)';
+  ctx.beginPath();ctx.ellipse(w1,bY+11,9.5,2.8,0,0,7);ctx.fill();
+  ctx.beginPath();ctx.ellipse(w2,bY+11,9.5,2.8,0,0,7);ctx.fill();
+  ctx.fillStyle='rgba(8,5,16,0.26)';
+  ctx.beginPath();ctx.ellipse((w1+w2)/2,bY+12,34,3.4,0,0,7);ctx.fill();
   ctx.restore();
   PS=1;
 }
@@ -1312,10 +1373,7 @@ function sceneStudio(t){
 
 function sceneStreet(t){
   drawBG(bgStreet,0.58);
-  // Kevins Rad steht am Späti (nur wenn er nicht gerade damit wegfährt)
-  PS=1.5;
-  if(S.mode!=='ride')drawEBike(2,-14,0.78,0,false);
-  PS=1;
+  PS=1;                         // Rad und Tram zeichnet die Malschicht (siehe frame)
 }
 /* Kevins Schlafzimmer, 07:02 — hier kommt ihre Nachricht an */
 function sceneBed(t){
@@ -1431,25 +1489,50 @@ const CHAT=[
   ['k','Wir kennen uns seit vier Minuten.'],
   ['l','Dann atmen wir uns kennen. 19:50, Atem Raum ✦'],
 ];
-function renderPortrait(P,face,size,mode){
-  const off=document.createElement('canvas');off.width=off.height=size;
-  const oc=off.getContext('2d');oc.imageSmoothingEnabled=false;
-  const grd=oc.createLinearGradient(0,0,0,size);
-  grd.addColorStop(0,'#3a2d5e');grd.addColorStop(1,'#5b4a86');
-  oc.fillStyle=grd;oc.fillRect(0,0,size,size);
-  const old=CTX();SETCTX(oc);
-  const sc=(mode==='circle')?size/46:size/70;                 // Kreis: Kopf füllt; Karte: Kopf + Rumpf
-  const ty=(mode==='circle')?size/2-15*sc:size*0.02;
-  oc.save();oc.translate(size/2-24*sc,ty);
-  figure(0,0,sc,P,1200,0.5,false,0.9,false,'neutral',0,false,false,null,face,false);
-  oc.restore();SETCTX(old);
+/* Das Hinge-Foto ist dieselbe Figur, die man gleich im Raum sitzen sieht —
+   gemalte Kulisse dahinter, Figur durch dieselbe Körnung wie im Spiel. */
+function renderPortrait(P,face,w,h,mode,bg){
+  const off=document.createElement('canvas');off.width=w;off.height=h;
+  const oc=off.getContext('2d');
+  if(bg&&bg.complete&&bg.naturalWidth){
+    oc.save();oc.filter='blur('+((mode==='circle')?3:5)+'px) brightness('+((mode==='circle')?0.88:0.66)+') saturate(0.92)';
+    const s=Math.max(w/bg.naturalWidth,h/bg.naturalHeight);
+    const bw=bg.naturalWidth*s, bh=bg.naturalHeight*s;
+    oc.drawImage(bg,(w-bw)/2,(h-bh)*0.42,bw,bh);
+    oc.restore();
+  }else{
+    const grd=oc.createLinearGradient(0,0,0,h);
+    grd.addColorStop(0,'#3a2d5e');grd.addColorStop(1,'#5b4a86');
+    oc.fillStyle=grd;oc.fillRect(0,0,w,h);
+  }
+  // Figur auf grobem Raster, damit sie dieselbe Pixelkörnung hat wie im Spiel
+  const fs=(mode==='circle')?0.5:0.30;
+  const fo=document.createElement('canvas');
+  fo.width=Math.max(1,Math.round(w*fs));fo.height=Math.max(1,Math.round(h*fs));
+  const fx=fo.getContext('2d');fx.scale(fs,fs);
+  const sc=(mode==='circle')?h/40:h/58;                       // Kreis: Kopf füllt; Karte: Kopf + Oberkörper
+  const ty=(mode==='circle')?h/2-17*sc:0.5*sc;
+  const old=CTX(),oldPS=PS;SETCTX(fx);PS=1;
+  fx.save();fx.translate(w/2-24*sc,ty);
+  figure(0,0,sc,P,1200,0.55,false,0.9,false,'neutral',0,false,false,null,face,false);
+  fx.restore();SETCTX(old);PS=oldPS;
+  fx.setTransform(1,0,0,1,0,0);
+  fx.globalCompositeOperation='source-atop';                  // Licht nur auf die Figur
+  fx.fillStyle='rgba(52,32,80,0.18)';fx.fillRect(0,0,fo.width,fo.height);
+  const g=fx.createRadialGradient(fo.width*0.4,fo.height*0.3,3,fo.width*0.4,fo.height*0.3,fo.width*0.7);
+  g.addColorStop(0,'rgba(255,178,84,0.24)');g.addColorStop(1,'rgba(255,190,110,0)');
+  fx.fillStyle=g;fx.fillRect(0,0,fo.width,fo.height);
+  oc.imageSmoothingEnabled=false;
+  oc.drawImage(fo,0,0,w,h);
   return off.toDataURL();
 }
 function portraits(){
-  if(!PORTRAIT.l){
-    PORTRAIT.l=PORTRAIT_L;
-    PORTRAIT.lr=PORTRAIT_L;
-    PORTRAIT.k=PORTRAIT_K;
+  const ready=bgStudio.complete&&bgStudio.naturalWidth&&bgFront.complete&&bgFront.naturalWidth;
+  if(!PORTRAIT.l||(!PORTRAIT.painted&&ready)){
+    PORTRAIT.painted=!!ready;
+    PORTRAIT.l =renderPortrait(LAUREN,-1,620,344,'card',bgStudio);
+    PORTRAIT.lr=renderPortrait(LAUREN,-1,168,168,'circle',bgStudio);
+    PORTRAIT.k =renderPortrait(KEVFIG, 1,168,168,'circle',bgFront);
   }
   return PORTRAIT;
 }
@@ -2125,33 +2208,34 @@ function endStep(){
 /* Tram in 320er-Koordinaten */
 function drawTram(x,doorOpen,t){
   PS=1.5;
-  px(x,88,150,10,'#1a2030');                       // Dach
-  px(x,96,150,46,'#dfe3ea');                       // Wagenkasten
-  px(x,96,150,3,'#ffffff');
-  px(x,120,150,4,'#1f5fbf');                       // blaues Band
-  px(x,136,150,6,'#9aa2b0');
-  px(x+2,102,32,16,'#0d1420');                     // Fenster
-  px(x+38,102,30,16,'#0d1420');
-  px(x+96,102,30,16,'#0d1420');
-  px(x+130,102,18,16,'#0d1420');
-  px(x+2,102,32,2,'rgba(255,255,255,0.16)');
-  px(x+38,102,30,2,'rgba(255,255,255,0.16)');
-  // warmes Innenlicht
-  px(x+2,104,32,12,'rgba(255,220,150,0.20)');
-  px(x+38,104,30,12,'rgba(255,220,150,0.20)');
-  px(x+96,104,30,12,'rgba(255,220,150,0.20)');
+  // Kontaktschatten auf dem nassen Asphalt — ohne den schwebt sie über der Straße
+  px(x-4,140,158,8,'rgba(6,4,14,0.55)');
+  px(x-8,147,166,4,'rgba(6,4,14,0.28)');
+  px(x,88,150,10,'#141a28');                       // Dach
+  px(x,96,150,46,'#8d95a9');                       // Wagenkasten, auf Nachtwert gedämpft
+  px(x,96,150,3,'#b4bbcb');
+  px(x,120,150,4,'#1c4f9e');                       // blaues Band
+  px(x,136,150,6,'#565e72');                       // Schürze übers Fahrwerk
+  // Fenster: nachts leuchtet der Wagen von innen — daran erkennt man eine Tram
+  for(const[wx,ww]of [[2,32],[38,30],[96,30],[130,18]]){
+    px(x+wx,102,ww,16,'#2e2414');
+    px(x+wx,103,ww,14,'#e2b76c');                  // Innenlicht
+    px(x+wx,103,ww,4,'#ffe3ab');
+    px(x+wx,115,ww,2,'rgba(48,32,12,0.45)');
+  }
   // Tür
-  px(x+70,98,26,42,doorOpen?'#101624':'#c2c8d2');
-  if(!doorOpen){px(x+82,98,2,42,'#8f97a4');px(x+72,102,20,14,'#0d1420');}
+  px(x+70,98,26,42,doorOpen?'#120d0a':'#aab2c0');
+  if(!doorOpen){px(x+82,98,2,42,'#7d8492');px(x+72,102,20,14,'#2e2414');px(x+72,103,20,12,'#d8ae66');}
   // Front
-  px(x+144,96,6,46,'#c8ccd4');
+  px(x+144,96,6,46,'#a6acb8');
   px(x+146,132,4,4,'#ffe9a8');                     // Scheinwerfer
   px(x-2,132,4,4,'#c8462e');                       // Rücklicht
-  px(x+140,88,10,4,'#1a2030');
+  px(x+140,88,10,4,'#141a28');
   // Räder
-  px(x+18,140,14,5,'#141822');px(x+112,140,14,5,'#141822');
-  // Licht auf der Straße
-  px(x,144,150,10,'rgba(255,230,180,0.05)');
+  px(x+18,140,14,5,'#0f131c');px(x+112,140,14,5,'#0f131c');
+  // Spiegelung im nassen Asphalt
+  px(x+4,148,142,7,'rgba(226,183,108,0.16)');
+  px(x+20,152,110,5,'rgba(226,183,108,0.09)');
   PS=1;
 }
 
@@ -2221,11 +2305,21 @@ function frame(t){
     S.breath=0.5+0.5*Math.sin(t/900);
   }
 
-  // Jonas hinten links (mit Kontaktschatten)
+  /* Ab hier zeichnet alles in die Malschicht — Figuren, Requisiten, Tram, Rad.
+     fgEnd() weiter unten zieht sie gekörnt und im Licht des Raums aufs Bild. */
+  const fgScene=S.scene;
+  fgBegin();
+
+  // Kevins Rad steht am Späti — gehört zur Figurenebene, nicht in die gemalte Kulisse
+  if(S.scene==='street'&&S.mode!=='ride'){PS=1.5;drawEBike(2,-14,0.78,0,false);PS=1;}
+  if(S.scene==='front'){PS=1.5;drawEBike(0,0,1,0,true);PS=1;}
+
+  // Jonas hinten in der Lücke zwischen den beiden Matten (mit Kontaktschatten)
   if(S.jonas&&S.scene==='studio'){
     const jSit=(S.pose==='sit');                 // Jonas setzt sich mit, wenn alle sitzen
-    PS=1;px(52,208,52,5,'rgba(10,6,20,0.30)');
-    figure(jSit?208:182,jSit?112:84,1.4,JONAS,t,0.5,jSit,2.2,true,(S.mode==='play')?'medi':'neutral',0,S.typing&&S.who==='j',false,null,0,true);
+    const jx=jSit?190:182;
+    PS=1;px(jx+14,209,40,5,'rgba(10,6,20,0.30)');
+    figure(jx,jSit?112:84,1.4,JONAS,t,0.5,jSit,2.2,true,(S.mode==='play')?'medi':'neutral',0,S.typing&&S.who==='j',false,null,0,true);
   }
 
   // Lauren
@@ -2233,7 +2327,8 @@ function frame(t){
   const mood=(S.mode==='play'||S.mode==='hold')?'medi':((t<S.moodT)?S.mood:'neutral');
   const mage=(performance.now()-S.moodStart)/1000;
   let lx,ly,showL=!S.gone&&S.mode!=='intro'&&S.mode!=='title'&&!S.bed;
-  if(S.scene==='studio'){ lx=S.pose==='sit'?300:278; ly=S.pose==='sit'?114:56; }
+  // sitzend: mittig auf der roten Matte (aus dem gemalten Raum ausgemessen)
+  if(S.scene==='studio'){ lx=S.pose==='sit'?254:278; ly=S.pose==='sit'?118:56; }
   else if(S.scene==='front'){ lx=296; ly=84; }
   else { lx=298; ly=82; }
 
@@ -2301,7 +2396,7 @@ function frame(t){
   if(S.mode!=='ride'&&S.mode!=='intro'&&S.mode!=='title'&&!S.bed&&(S.mode!=='end'||!S.phone)){
     const kSit=(S.scene==='studio'&&S.pose==='sit');
     let kx,ky;
-    if(S.scene==='studio'){kx=kSit?148:104;ky=kSit?116:56;}   // sitzend: auf SEINER Matte
+    if(S.scene==='studio'){kx=kSit?93:104;ky=kSit?118:56;}    // sitzend: mittig auf der türkisen Matte
     else if(S.scene==='front'){kx=112;ky=84;}
     else if(S.mode==='tram'){kx=56;ky=96;}                    // am Bahnsteig, näher an der Kamera
     else {kx=104;ky=82;}
@@ -2339,6 +2434,8 @@ function frame(t){
     }
     // Requisiten zeichnet figure() jetzt direkt in ihrer Hand (prop-Parameter)
   }
+
+  fgEnd(fgScene);          // Malschicht aufs Bild: gekörnt, im Licht des Raums
 
   // (POV abgeschafft — Kevin steht als Figur im Bild)
 
@@ -2471,6 +2568,7 @@ function schedule(){
 }
 setInterval(()=>{ if(performance.now()-last>200) frame(performance.now()); },100);
 
+window.__S=S;window.__dbg={S,portraits,phoneShow,renderPortrait,figure};   // Debug-Griff: Szenen direkt anspringen
 reset();
 schedule();
 })();

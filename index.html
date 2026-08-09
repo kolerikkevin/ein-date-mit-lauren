@@ -177,7 +177,7 @@ function drawBG(img,anchor){
    halb so großes Offscreen-Canvas und werden ungeglättet hochgezogen: dieselbe
    Pixelkörnung wie im Hintergrund. Danach kommt das Licht des Raums drauf. */
 const CVX=cv.getContext('2d');
-const FGS=0.8;                 // feiner als 0.5 — sonst zerfallen die Augen zu Ringen
+const FGS=1;                   // volle Auflösung: die Figuren sind schon Pixelgrafik
 const fgc=document.createElement('canvas');
 fgc.width=Math.round(W*FGS);fgc.height=Math.round(H*FGS);
 const fgx=fgc.getContext('2d');
@@ -1300,16 +1300,16 @@ function sceneFront(t){
    Augen und Mund sind vorbereitete Varianten desselben Bildes, die
    pixelgenau darüberpassen (Blinzeln, Sprechen). */
 const SPRM={   // hand = die beiden Handmittelpunkte, aus den Sprites ausgemessen
-  lst:{w:50,h:102,hals:39,hand:[[14,63],[36,63]]}, lsi:{w:66,h:76,hals:38,hand:[[21,49],[44,49]]}, lme:{w:68,h:80,hals:39},
-  kst:{w:47,h:103,hals:40,hand:[[13,75],[33,76]]}, ksi:{w:71,h:82,hals:31,hand:[[18,60],[53,60]]}, kme:{w:73,h:96,hals:41},
-  jst:{w:54,h:108,hals:42,hand:[[15,66],[37,66]]}, jsi:{w:66,h:71,hals:33,hand:[[19,48],[46,48]]}, jme:{w:77,h:90,hals:45},
+  lst:{w:50,h:102,hals:39,hand:[[14,63],[36,63]]}, lsi:{w:59,h:76,hals:39,hand:[[10,58],[49,58]]},
+  kst:{w:47,h:103,hals:40,hand:[[13,75],[33,76]]}, ksi:{w:61,h:72,hals:34,hand:[[10,55],[51,55]]},
+  jst:{w:54,h:108,hals:42,hand:[[15,66],[37,66]]}, jsi:{w:69,h:87,hals:34,hand:[[12,68],[57,68]]},
   // Gestenpose: gleicher Rahmen wie die Stehpose, nur der Körper hat eine Hand oben
   lge:{w:50,h:102,hals:39}, kge:{w:47,h:103,hals:40}
 };
 const SPR={};
 for(const k of Object.keys(SPRM)){
   SPR[k]=new Image();SPR[k].src='bilder/sprites/'+k+'.png';
-  if(k.endsWith('st')||k.endsWith('si')||k==='jme')for(const v of ['b','t1','t2']){
+  if(k.endsWith('st')||k.endsWith('si'))for(const v of ['b','t1','t2']){
     SPR[k+v]=new Image();SPR[k+v].src='bilder/sprites/'+k+v+'.png';
   }
 }
@@ -1322,10 +1322,10 @@ function spriteFig(who,pose,cx,fuss,S,t,o){
   const key=who+pose, m=SPRM[key];
   if(!m||!sprBereit(key))return false;
   const cyc=(t+(o.phase||0)*1000)%4300;
-  const blink=(pose!=='me')&&(cyc<150||(cyc>2100&&cyc<2210));
+  const blink=o.medi||(cyc<150||(cyc>2100&&cyc<2210));
   let bild=key;
-  if(o.talking&&sprBereit(key+'t1'))      bild=key+(Math.floor(t/115)%2?'t2':'t1');
-  else if(blink&&sprBereit(key+'b'))      bild=key+'b';
+  if(!o.medi&&o.talking&&sprBereit(key+'t1')) bild=key+(Math.floor(t/115)%2?'t2':'t1');
+  else if(blink&&sprBereit(key+'b'))          bild=key+'b';
   const img=SPR[bild]||SPR[key];
   // Beim Reden gestikuliert die Hand: der KÖRPER kommt dann aus der Gestenpose,
   // der KOPF bleibt der mit Mund und Augen — beide Bilder liegen deckungsgleich.
@@ -1334,27 +1334,30 @@ function spriteFig(who,pose,cx,fuss,S,t,o){
   const rumpf=gestikuliert?SPR[gesteKey]:img;
 
   const br=(o.breath===undefined)?0.5+0.5*Math.sin(t/1500):o.breath;
-  const dy=br>0.55?1:0;                       // ein Pixel Atem — mehr braucht es nicht
   const w=m.w,h=m.h,hals=m.hals;
-  const bx=Math.round(cx-w*S/2), by=Math.round(fuss-h*S);
-  const wippe=o.walk?Math.round(Math.abs(Math.sin(t/150))*1.4):0;
+  /* Alles rastert auf ganze Bildpunkte. Sonst landen Körper und Kopf bei jedem
+     Atemzug auf halben Pixeln und die Kanten zappeln — und eine Drehung des
+     Kopfes würde die Pixel in jedem Einzelbild neu ausrechnen, was bei
+     Pixelgrafik als Flimmern im Gesicht ankommt. Deshalb: kein Rotieren,
+     sondern ein ganzer Pixel Versatz. */
+  const P =Math.max(1,Math.round(S));         // ein Sprite-Pixel in Bildpunkten
+  const bw=Math.round(w*S), bh=Math.round(h*S), hh=Math.round(hals*S);
+  const bx=Math.round(cx-bw/2), by=Math.round(fuss-bh);
+  const dy =(br>0.55)?P:0;                    // ein Pixel Atem — mehr braucht es nicht
+  const wip=o.walk?(Math.sin(t/150)>0?P:0):0; // Gehen: ein Pixel auf und ab
+  const wieg=(o.tilt===0)?0:(Math.sin(t/2600)>0.6?P:(Math.sin(t/2600)<-0.6?-P:0));
 
-  ctx.save();
   const sm=ctx.imageSmoothingEnabled;ctx.imageSmoothingEnabled=false;
   // Körper — staucht sich beim Ausatmen, die Füße bleiben stehen
-  ctx.drawImage(rumpf,0,hals,w,h-hals, bx,by+(hals+dy-wippe)*S, w*S,(h-hals-dy+wippe)*S);
-  // Kopf — eigenes Teil, deshalb nickt und neigt er
-  const neig=(o.tilt===undefined?Math.sin(t/2600)*0.016:o.tilt);
-  const hx=bx+w*S/2, hy=by+(hals+dy-wippe)*S;
-  ctx.translate(hx,hy);ctx.rotate(neig);ctx.translate(-hx,-hy);
-  ctx.drawImage(img,0,0,w,hals, bx,by+(dy-wippe)*S, w*S,hals*S);
-  ctx.restore();
+  ctx.drawImage(rumpf,0,hals,w,h-hals, bx, by+hh+dy-wip, bw, bh-hh-dy+wip);
+  // Kopf — eigenes Teil, deshalb wiegt und nickt er
+  ctx.drawImage(img,0,0,w,hals, bx+wieg, by+dy-wip, bw, hh);
   ctx.imageSmoothingEnabled=sm;
 
   if(o.prop&&m.hand){                          // Requisit in die Hand, nicht an die Hüfte
     const seite=gestikuliert?0:(o.propSide==='l'?0:1);
     const [hxp,hyp]=m.hand[seite];
-    drawPropAt(o.prop, bx+hxp*S, by+(hyp+dy)*S, S);
+    drawPropAt(o.prop, bx+Math.round(hxp*S), by+Math.round(hyp*S)+dy, S);
   }
   return true;
 }
@@ -1372,7 +1375,8 @@ const medNow=()=>(S.mode==='play'||S.mode==='hold');
 
 /* Requisiten in Sprite-Optik: klein, kantig, in der Hand */
 function drawPropAt(art,x,y,S){
-  const q=(dx,dy,dw,dh,c)=>{ctx.fillStyle=c;ctx.fillRect(Math.round(x+dx*S),Math.round(y+dy*S),Math.ceil(dw*S),Math.ceil(dh*S));};
+  const P=Math.max(1,Math.round(S));
+  const q=(dx,dy,dw,dh,c)=>{ctx.fillStyle=c;ctx.fillRect(Math.round(x)+dx*P,Math.round(y)+dy*P,dw*P,dh*P);};
   if(art==='riegel'){                       // Koro-Proteinbar, Schokolade, vegan
     q(-3,-3,7,9,'#241610');                 // dunkle Kante
     q(-2,-2,5,7,'#6b4426');                 // Schokolade
@@ -2397,16 +2401,18 @@ function frame(t){
   fgBegin();
 
   // Kevins Rad steht am Späti — gehört zur Figurenebene, nicht in die gemalte Kulisse
-  if(S.scene==='street'&&S.mode!=='ride'){PS=1.5;drawEBike(2,-14,0.78,0,false);PS=1;}
-  if(S.scene==='front'){PS=1.5;drawEBike(0,0,1,0,true);PS=1;}
+  if(!S.bed){                              // im Schlafzimmer steht kein Rad herum
+    if(S.scene==='street'&&S.mode!=='ride'){PS=1.5;drawEBike(2,-14,0.78,0,false);PS=1;}
+    if(S.scene==='front'){PS=1.5;drawEBike(0,0,1,0,true);PS=1;}
+  }
 
   // Jonas hinten in der Lücke zwischen den beiden Matten (mit Kontaktschatten)
   if(S.jonas&&S.scene==='studio'){
     const jSit=(S.pose==='sit');                 // Jonas setzt sich mit, wenn alle sitzen
     const jx=jSit?190:182, jsc=1.4;
     PS=1;px(jx+14,209,40,5,'rgba(10,6,20,0.30)');
-    const jPose=jSit?(medNow()?'me':'si'):'st';
-    if(!sprAt('j',jPose,jx,jSit?112:84,jsc,jSit,t,{phase:2.2,breath:0.5,talking:S.typing&&S.who==='j'}))
+    const jPose=jSit?'si':'st';
+    if(!sprAt('j',jPose,jx,jSit?112:84,jsc,jSit,t,{phase:2.2,breath:0.5,medi:jSit&&medNow(),talking:S.typing&&S.who==='j'}))
       figure(jx,jSit?112:84,1.4,JONAS,t,0.5,jSit,2.2,true,(S.mode==='play')?'medi':'neutral',0,S.typing&&S.who==='j',false,null,0,true);
   }
 
@@ -2495,8 +2501,8 @@ function frame(t){
     const kProp=(S.scene==='street'&&S.bottle)?'bottle':(S.scene==='front'&&S.kbar)?'bar':null;
     const kBreath=(S.mode==='play'||S.mode==='hold')?S.breath:0.5+0.5*Math.sin(t/1000+2);
     S._kx=kx;
-    const kPose=kSit?(medNow()?'me':'si'):'st';
-    if(!sprAt('k',kPose,kx,ky,ksc,kSit,t,{breath:kBreath,talking:S.typing&&S.who==='k',phase:0.6,
+    const kPose=kSit?'si':'st';
+    if(!sprAt('k',kPose,kx,ky,ksc,kSit,t,{breath:kBreath,talking:S.typing&&S.who==='k',phase:0.6,medi:kSit&&medNow(),
         prop:kProp==='bar'?'riegel':kProp,propSide:'r'}))
       figure(kx,ky,ksc,KEVFIG,t,kBreath,kSit,0.6,false,((S.mode==='play'||S.mode==='hold'))?'medi':'neutral',0,S.typing&&S.who==='k',false,kProp,1,S.scene==='studio');
   }
@@ -2510,8 +2516,8 @@ function frame(t){
     const lWalk=S.mode==='tram'&&S.tram&&((t-S.tram.t0)/1000)>=2.4&&((t-S.tram.t0)/1000)<3.9;
     const lProp=S.phoneHand?'phone':(S.scene==='front'&&S.riegel)?'riegel':(S.scene==='street'&&S.bottle)?'bottle':null;
     const lSit=S.scene==='studio'&&S.pose==='sit';
-    const lPose=lSit?(medNow()?'me':'si'):'st';
-    if(!sprAt('l',lPose,lx,ly,sc,lSit,t,{breath:lb,talking:lTalk,walk:lWalk,phase:1.4,
+    const lPose=lSit?'si':'st';
+    if(!sprAt('l',lPose,lx,ly,sc,lSit,t,{breath:lb,talking:lTalk,walk:lWalk,phase:1.4,medi:lSit&&medNow(),
         prop:lProp,propSide:'l'}))
       figure(lx,ly,sc,LAUREN,t,lb,lSit,1.4,false,mood,mage,lTalk,lWalk,lProp,-1,S.scene==='studio');
     // Tränen — während der Wellen (ab Welle 2) UND danach, deutlich sichtbar

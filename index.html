@@ -63,6 +63,11 @@
   #phone .bub.me{background:#1f4f8a;color:#dceaff;margin-left:auto;border-bottom-right-radius:4px}
   #phone .who{font-size:11px;color:#8b93a7;letter-spacing:.4px;margin:0 4px 2px}
   #phone .who.me{text-align:right}
+  #phone .typing{display:inline-flex;gap:4px;background:#242b3a;border-radius:14px;padding:10px 12px}
+  #phone .typing span{width:6px;height:6px;border-radius:50%;background:#8b93a7;animation:blink 1.1s infinite}
+  #phone .typing span:nth-child(2){animation-delay:.18s}
+  #phone .typing span:nth-child(3){animation-delay:.36s}
+  @keyframes blink{0%,60%,100%{opacity:.25}30%{opacity:1}}
   #phone .match{text-align:center;padding:6px 0 2px;
                 background:linear-gradient(#6a1f48,#a83a63);border-radius:12px}
   #phone .match h2{font-size:27px;line-height:1.05;color:#ffe066;margin:12px 0 4px;
@@ -74,10 +79,21 @@
   #phone .match p{font-size:15.5px;font-family:'Avenir Next',Avenir,'Segoe UI',system-ui,sans-serif;color:#ffd9e6;margin:6px 0 12px}
   #phone .match .btn{background:#fff;color:#a83a63;font-weight:700;font-size:14px;border-radius:10px;
                      padding:11px 0;margin:0 14px 14px;letter-spacing:.6px}
+  #phone .likebar{display:flex;gap:10px;align-items:center;margin-top:12px}
+  #phone .like{flex:1;text-align:center;background:#f0b8c8;color:#2a1020;font-weight:700;font-size:15px;
+               border-radius:12px;padding:12px 0;letter-spacing:.6px;cursor:pointer;user-select:none;
+               font-family:'Avenir Next',Avenir,'Segoe UI',system-ui,sans-serif}
+  #phone .like:active{transform:translateY(1px)}
+  #phone .skip{width:52px;text-align:center;background:#20283a;color:#8b93a7;border-radius:12px;padding:12px 0;font-size:15px}
+  #phone .ph{position:relative;overflow:hidden}
+  .heart{position:absolute;font-size:22px;pointer-events:none;animation:rise 1.5s ease-out forwards}
+  @keyframes rise{0%{opacity:0;transform:translateY(0) scale(.6)}
+                  15%{opacity:1}
+                  100%{opacity:0;transform:translateY(-190px) scale(1.25)}}
   @media (max-width:700px){
     body{padding:0;align-items:flex-start}
     #frame{padding-top:6px}
-    #say{display:flex;align-items:center;height:132px;overflow:hidden;
+    #say{display:flex;flex-direction:column;justify-content:center;gap:3px;height:132px;overflow:hidden;
          background:#08080f;border:2px solid #16162a;border-bottom:none;
          padding:10px 12px;font-weight:bold;font-size:16px;line-height:1.4;
          text-shadow:1px 1px 0 #000}
@@ -204,21 +220,12 @@ function drawTitleArt(t){
   const oldCtx=CTX();SETCTX(c);
   figure(0,0,1,LAUREN,t,0.5+0.5*Math.sin(t/1500),false,0.9,false,'neutral',0,false,false,null,wide?-1:1,false);
   SETCTX(oldCtx);c.restore();
-  // ---------- Typografie ----------
-  const LEFT=Math.round(TW*(wide?0.09:0.15)), MAXW=TW*(wide?0.52:0.78);
+  // ---------- Typografie: nur der Titel ----------
+  const LEFT=Math.round(TW*(wide?0.09:0.12)), MAXW=TW*(wide?0.52:0.80);
   c.textBaseline='top';c.textAlign='left';
   const fit=(str,start,weight)=>{let px=start;
     do{c.font=weight+' '+px+'px Georgia,"Times New Roman",serif';px-=1;}
     while(c.measureText(str).width>MAXW&&px>10);return px+1;};
-  const topY=Math.round(TH*(wide?0.08:0.09));
-  // Klammer
-  const brT=topY-14*U, brH=TH*(wide?0.34:0.40), brX=LEFT-30*U;
-  R(brX,brT,8*U,brH,'#f6e06a');R(brX,brT,30*U,8*U,'#f6e06a');R(brX,brT+brH-8*U,30*U,8*U,'#f6e06a');
-  const s0='Ich will atmen lernen';
-  const p0=fit(s0,Math.round(34*U*1.4),'700');
-  c.font='700 '+p0+'px Georgia,"Times New Roman",serif';
-  c.fillStyle='#120a24';c.fillText(s0,LEFT+2,topY+2);
-  c.fillStyle='#fdf6e0';c.fillText(s0,LEFT,topY);
   const big=(str,y)=>{
     const px=fit(str,Math.round(120*U*1.4),'700');
     c.font='700 '+px+'px Georgia,"Times New Roman",serif';
@@ -229,15 +236,9 @@ function drawTitleArt(t){
     c.fillStyle=lg;c.fillText(str,LEFT,y);
     return px;
   };
-  const y1=topY+p0*1.35;
+  const y1=Math.round(TH*(wide?0.13:0.12));
   const h1=big('EIN DATE',y1);
   big('MIT LAUREN',y1+h1*0.96);
-  const s3='frei nach einer wahren Verabredung';
-  const p3=fit(s3,Math.round(22*U*1.4),'700');
-  c.font='700 '+p3+'px Georgia,"Times New Roman",serif';
-  const y3=y1+h1*2.06;
-  c.fillStyle='#120a24';c.fillText(s3,LEFT+1,y3+1);
-  c.fillStyle='#f6e06a';c.fillText(s3,LEFT,y3);
   // Startaufforderung
   if(Math.sin(t/380)>0){
     const fs=Math.max(14,Math.round(24*U));
@@ -1598,7 +1599,7 @@ function sceneTitle(t){
   poly([[114,90],[212,94],[211,104],[113,100]],'#2f2352');
   PS=1;
   ctx.save();ctx.translate(244,138);ctx.rotate(0.035);
-  ctx.font=(S.narr?'italic 13px':'bold 13px')+' ui-monospace,"Courier New",monospace';ctx.textBaseline='top';
+  ctx.font='bold 13px ui-monospace,"Courier New",monospace';ctx.textBaseline='top';
   ctx.fillStyle='#ffd98a';ctx.fillText('ATEM RAUM',0,0);ctx.restore();
   PS=1.5;
   // Schaufenster mit Leben drin
@@ -1669,6 +1670,14 @@ const $phone=document.getElementById('phone'), $phbody=document.getElementById('
       $phclock=document.getElementById('phclock'), $phtitle=document.getElementById('phtitle'),
       $phbatt=document.getElementById('phbatt');
 let PORTRAIT={};
+const CHAT=[
+  ['k','Geh grad zum Rewe. Soll ich dir was mitbringen?'],
+  ['l','Koro Proteinbar. Schokolade, vegan.'],
+  ['k','Notiert. Und sonst so, Donnerstag?'],
+  ['l','Donnerstag Breathwork? 2 Std atmen, bis man weint oder lacht.'],
+  ['k','Klar. Komme mit dem E-Bike.'],
+  ['l','19:50. Atem Raum ✦'],
+];
 function renderPortrait(P,face,size,mode){
   const off=document.createElement('canvas');off.width=off.height=size;
   const oc=off.getContext('2d');oc.imageSmoothingEnabled=false;
@@ -1703,7 +1712,8 @@ function phoneShow(screen){
       '<div class="sub">Dichterin &amp; Energieheilerin</div>'+
       '<div class="loc">Französin · München · 4 km</div>'+
       '<div class="prompt"><b>MEINE LIEBESSPRACHE</b><span>Proteinriegel. Schokolade, vegan. Nicht verhandelbar.</span></div>'+
-      '<div class="prompt"><b>MEIN GEDICHT VON HEUTE</b><span>„München atmet flach. Isch auch."</span></div>';
+      '<div class="prompt"><b>MEIN GEDICHT VON HEUTE</b><span>„München atmet flach. Isch auch."</span></div>'+
+      '<div class="likebar"><div class="skip">✕</div><div class="like" id="likebtn">♥  LIKEN</div></div>';
   }else if(screen==='match'){
     $phclock.textContent='22:41';$phtitle.textContent='hinge';$phbatt.textContent='54%';
     $phbody.innerHTML=
@@ -1715,46 +1725,61 @@ function phoneShow(screen){
       '<p>Ihr mögt euch.</p>'+
       '<div class="btn">NACHRICHT SCHREIBEN</div></div>';
   }else{
-    const all=S.intro&&S.intro.all;
-    $phclock.textContent=all?'19:38':'19:12';$phtitle.textContent='Lauren ✦';$phbatt.textContent=all?'66%':'70%';
-    const MSG=[
-      ['k','Geh grad zum Rewe. Soll ich dir was mitbringen?'],
-      ['l','Koro Proteinbar. Schokolade, vegan.'],
-      ['l','Donnerstag Breathwork? 2 Std atmen, bis man weint oder lacht.'],
-      ['k','Klar. Komme mit dem E-Bike.'],
-      ['l','19:50. Atem Raum ✦'],
-    ];
-    const upto=all?MSG.length:2;
-    $phbody.innerHTML=MSG.slice(0,upto).map(([w,txt],i)=>{
+    const step=(S.intro&&S.intro.step)||0;
+    $phclock.textContent=step>=CHAT.length?'19:38':'19:12';
+    $phtitle.textContent='Lauren ✦';$phbatt.textContent=step>=CHAT.length?'66%':'70%';
+    $phbody.innerHTML=CHAT.slice(0,step).map(([w,txt],i)=>{
       const me=w==='k';
-      const tag=(i===0||MSG[i-1][0]!==w)?'<div class="who'+(me?' me':'')+'">'+(me?'du':'Lauren')+'</div>':'';
+      const tag=(i===0||CHAT[i-1][0]!==w)?'<div class="who'+(me?' me':'')+'">'+(me?'du':'Lauren')+'</div>':'';
       return tag+'<div class="bub '+(me?'me':'her')+'">'+txt+'</div>';
-    }).join('');
+    }).join('')+(step<CHAT.length?'<div class="typing"><span></span><span></span><span></span></div>':'');
+    $phbody.scrollTop=$phbody.scrollHeight;
   }
 }
-document.getElementById('phone').addEventListener('pointerdown',e=>{
-  e.preventDefault();audioInit();
-  if(S.typing){skipTyping();return;}
-  if(S.pending&&S.pending.length===1){const only=S.pending[0];S.pending=null;$ch.innerHTML='';only.go();}
-});
+function hearts(){
+  const box=document.querySelector('#phone .ph');if(!box)return;
+  for(let i=0;i<9;i++){
+    const h=document.createElement('div');
+    h.className='heart';h.textContent='♥';
+    h.style.left=(16+i*9+((i*37)%9))+'%';
+    h.style.bottom='10%';
+    h.style.color=i%2?'#ff87a8':'#ffd0dd';
+    h.style.animationDelay=(i*0.08)+'s';
+    box.appendChild(h);
+    setTimeout(()=>h.remove(),1900);
+  }
+  tone(660,0.12,'sine',0.05);tone(880,0.16,'sine',0.045,0.09);
+}
 function phoneHide(){$phone.classList.remove('on');$phone.hidden=true;cv.style.display='';}
 
 const SCENE={front:sceneFront,studio:sceneStudio,street:sceneStreet,title:sceneTitle};
 
 /* ================= Text à la Monkey Island ================= */
 function wrapT(s,max){const o=[];let l='';for(const w of s.split(' ')){if((l+w).length>max){o.push(l.trim());l='';}l+=w+' ';}if(l.trim())o.push(l.trim());return o;}
-function drawSay(txt,col,yTop,ax){
-  if(!txt)return;
+function drawSay(segs,yTop,ax){
+  if(!segs||!segs.length)return;
   PS=1;
-  ctx.font='bold 13px ui-monospace,"Courier New",monospace';ctx.textBaseline='top';
+  ctx.font='bold 13px ui-monospace,"Courier New",monospace';
+  const CW=ctx.measureText('M').width, MAX=Math.floor((W-24)/CW);
+  // Jedes Segment auf eigene Zeilen: Erzähltes grau, Rede mit Namen in Sprecherfarbe
+  const rows=[];let lastName=null;
+  for(const g of segs){
+    const showName=g.speak&&g.name&&g.name!==lastName;
+    if(g.speak)lastName=g.name;else lastName=null;
+    const raw=(g.speak?(showName?g.name+': ':'')+g.text:g.text).replace(/\s+/g,' ').trim();
+    if(!raw)continue;
+    for(const ln of wrapT(raw,MAX))rows.push({text:ln,col:g.col,speak:g.speak});
+  }
   const cx0=(ax===undefined)?W/2:ax;
   let y=yTop;
-  for(const ln of wrapT(txt,42)){
-    const w=ctx.measureText(ln).width;
-    const x=Math.round(Math.max(6,Math.min(W-6-w,cx0-w/2)));   // über dem Sprecher, im Bild gehalten
+  for(const r of rows){
+    ctx.font=(r.speak?'bold 13px':'13px')+' ui-monospace,"Courier New",monospace';
+    ctx.textBaseline='top';
+    const wpx=r.text.length*CW;
+    const x=Math.round(Math.max(6,Math.min(W-6-wpx,cx0-wpx/2)));
     ctx.fillStyle='#000';
-    for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++)if(a||b)ctx.fillText(ln,x+a,y+b);
-    ctx.fillStyle=col;ctx.fillText(ln,x,y);
+    for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)if(dx||dy)ctx.fillText(r.text,x+dx,y+dy);
+    ctx.fillStyle=r.col;ctx.fillText(r.text,x,y);
     y+=15;
   }
 }
@@ -1806,18 +1831,66 @@ const NAME_OF={l:'Lauren',j:'Jonas',k:'Kevin'};
 const COL_OF={l:'#f0b8c8',j:'#e0c27a',k:'#9ac0f0',n:'#b8b8cc'};
 function line(who,txt){
   const t=(txt||'').trim();
-  // EINE Regel für alles: Nur wenn die Zeile durchgehend die Rede einer Person ist,
-  // bekommt sie Name + Farbe. Sobald erzählt wird oder mehrere sprechen → Erzähler.
-  const quote=/^["»„]/.test(t);
-  const swap=/["»“]\s*[—–-]\s*["»„]/.test(t);            // "…" — "…" = Dialogwechsel
-  const outside=t.replace(/["»„][^"«“]*["«“]/g,' ');       // alles außerhalb der Zitate
-  const narrated=/\b(sagt|sagte|fragt|nickt|schaut|kramt|dreht|klopft|hebt|steigt|beißt|reißt|legt|zeigt|lacht|grinst)\b/i.test(outside);
-  const pure=who!=='n'&&quote&&!swap&&!narrated;
-  const eff=pure?who:'n';
-  S.who=eff;S.narr=(eff==='n');
-  S.full=(pure?NAME_OF[who]+': ':'')+txt;
-  S.col=COL_OF[eff];
+  // Eine Zeile kann Erzähltext UND Rede enthalten. Statt sie einfarbig zu machen,
+  // wird sie in Segmente zerlegt: Erzähltes grau-kursiv, Gesprochenes in Sprecherfarbe.
+  S.who=who;
+  S.segs=speechSegments(t,who);
+  S.narr=!S.segs.some(g=>g.speak);
+  S.full=t;
+  S.col=COL_OF[who]||COL_OF.n;
   S.shown=0;S.typing=true;S.pause=0;
+}
+/* Zerlegt "Sie kramt. \"Anzahlung.\"" in [{erzählt},{gesprochen}] */
+function speechSegments(t,who){
+  const out=[];
+  const re=/["»„]([^"«“]*)["«“]/g;
+  let last=0,m,cur=who;
+  while((m=re.exec(t))){
+    const before=t.slice(last,m.index);
+    if(before){
+      const nm=/(^|[\s—–-])(Sie|Er|Du|Lauren|Kevin|Jonas)\s*:\s*$/.exec(before);
+      if(nm){
+        cur=({'Sie':'l','Lauren':'l','Du':'k','Kevin':'k','Er':'j','Jonas':'j'})[nm[2]]||who;
+        const head=before.slice(0,nm.index+(nm[1]?nm[1].length:0));
+        if(head.trim())out.push({text:head,speak:false});
+      }else{
+        out.push({text:before,speak:false});
+        cur=who;
+      }
+    }
+    out.push({text:m[0],speak:true,who:cur});
+    last=re.lastIndex;
+  }
+  const rest=t.slice(last);
+  if(rest)out.push({text:rest,speak:false});
+  if(!out.length)out.push({text:t,speak:false});
+  return out;
+}
+/* Segmente bis zur getippten Zeichenzahl kürzen */
+function sayHTMLFrom(list){
+  const esc=x=>x.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  let lastN=null;
+  return list.map(g=>{
+    const t=g.text.replace(/\s+/g,' ').trim();
+    if(!t)return '';
+    const showN=g.speak&&g.name&&g.name!==lastN;
+    lastN=g.speak?g.name:null;
+    return '<div style="color:'+g.col+(g.speak?';font-weight:700':';font-style:italic;opacity:.92')+'">'
+           +(showN?esc(g.name)+': ':'')+esc(t)+'</div>';
+  }).join('');
+}
+function fullSayHTML(){return sayHTMLFrom(visibleSegs(1e9));}
+function visibleSegs(n){
+  const out=[];let left=n;
+  for(const g of (S.segs||[])){
+    if(left<=0)break;
+    const txt=g.text.slice(0,left);
+    const w=g.who||S.who;
+    out.push({text:txt,col:g.speak?(COL_OF[w]||COL_OF.n):COL_OF.n,speak:!!g.speak,
+              name:g.speak?({l:'Lauren',k:'Kevin',j:'Jonas'})[w]:null});
+    left-=g.text.length;
+  }
+  return out;
 }
 function beat(who,txt,list,hint){S.mood='neutral';S.moodT=0;line(who,txt);opts(list,hint);}
 function reply(who,txt,next){line(who,txt);opts([{t:'(weiter)',go:next}],'Weiter');}
@@ -1850,9 +1923,9 @@ const RAW=[
  ]},
  {sc:'studio',who:'l',txt:'"Und was machst du? Nicht beruflich. Isch meine, was machst du wirklisch."',hint:'Die Frage, auf die alles ankommt',o:[
    ['"Mein Nervensystem und ich reden gerade nicht miteinander."',2,0,'l','Sie: "Seit wann?" Du: "2019." Sie: "Dann ist das hier eine Paartherapie. Isch bin die Therapeutin, der Raum ist der Anwalt."'],
-   ['"Ich denke über Fernsehen nach, das es noch nicht gibt."',2,0,'l','"Oh! Das ist auch Dichtung. Nur mit Budget." Sie sagt Budget wie ein Schimpfwort.'],
-   ['"Ich hab gelesen, man kann dabei weinen. Ich wollte das mal testen."',1,1,'l','Sie: "Du machst Breathwork als Produkttest." Du: "Ich arbeite beim Fernsehen." Sie: "Das erklärt viel."'],
-   ['"Portfolio Manager."',0,2,'l','"Ehm." Lange Pause. "Und das Wirklische?"']
+   ['"Ich denke darüber nach, wie Leute in zehn Jahren Geschichten erzählen."',2,0,'l','"Oh! Das ist auch Dichtung. Nur mit Budget." Sie sagt Budget wie ein Schimpfwort.'],
+   ['"Ich hab gelesen, man kann dabei weinen. Ich wollte das mal testen."',1,1,'l','Sie: "Du machst Breathwork als Produkttest." Du: "Ich arbeite mit Zukünften." Sie: "Das erklärt viel."'],
+   ['"Trend- und Innovationskram. Medien, KI, so was."',0,2,'l','"Ehm." Lange Pause. "Und das Wirklische?"']
  ]},
  {sc:'studio',who:'n',jon:1,txt:'Ein Mann mit Dutt, Stirnband und der Ruhe eines Möbelstücks kommt aus dem Hinterzimmer.',hint:'Der Kursleiter erscheint',o:[
    ['Du nickst ihm zu.',0,0,'j','"Namaste. Isch— äh. ICH bin Jonas." Er hat kurz ihren Akzent gespiegelt. Es war ein Versehen. Lauren hat es gehört.'],
@@ -1878,18 +1951,29 @@ function feedback(sym,cringe){
 /* ---- Vorspiel am Handy: ihr Profil, dann der Chat, aus dem das Date entstand ---- */
 function introProfile(){
   S.mode='intro';S.intro={t0:performance.now()};phoneShow('profile');
-  line('n','Ihr Profil. Du kennst es auswendig.');
-  opts([{t:'Weiter.',go:introMatch}],'Hinge · vor sechs Tagen');
+  line('n','Donnerstagabend, du wischst dich durch die App. Und dann das hier.');
+  opts([{t:'Ihr Profil lesen.',go:introLike}],'Neu für dich · 4 km entfernt');
+}
+function introLike(){
+  S.mode='intro';S.intro={t0:performance.now()};phoneShow('profile');
+  line('n','Dichterin und Energieheilerin. Und ein Riegel als Liebessprache. Du liest es zweimal.');
+  opts([{t:'♥ Liken.',go:()=>{hearts();setTimeout(introMatch,1100);}}],'Der Daumen weiß es schon');
 }
 function introMatch(){
   S.mode='intro';S.intro={t0:performance.now()};phoneShow('match');SFX.win();
-  line('n','Sechs Tage vor dem Date, 22:41.');
-  opts([{t:'Ihr schreiben.',go:introChat}],'Es hat gematcht');
+  line('n','Sie hatte dich vorher schon geliked. 22:41.');
+  opts([{t:'Ihr schreiben.',go:()=>introChat(1)}],'Es hat gematcht');
 }
-function introChat(){
-  S.mode='intro';S.intro={t0:performance.now(),all:true};phoneShow('chat');
-  line('n','Euer Chat. Danach war Donnerstag.');
-  opts([{t:'Jacke an, Rad raus.',go:()=>{phoneHide();S.mode='talk';S.intro=null;SFX.page();talkBeat();}}],'19:40 · Zeit loszufahren');
+function introChat(step){
+  S.mode='intro';S.intro={t0:performance.now(),step};phoneShow('chat');
+  if(step>=CHAT.length){
+    line('n','Und so wurde aus einer Rewe-Frage ein Date.');
+    return opts([{t:'Jacke an, Rad raus.',go:()=>{phoneHide();S.mode='talk';S.intro=null;SFX.page();talkBeat();}}],'19:40 · Zeit loszufahren');
+  }
+  const who=CHAT[step-1][0];
+  line('n',step===1?'Du fragst das Erstbeste, was dir einfällt.'
+       :(who==='l'?'Sie antwortet sofort.':'Du tippst weiter.'));
+  opts([{t:step===1?'Absenden.':'Weiter.',go:()=>{SFX.blip();introChat(step+1);}}],'Euer Chat');
 }
 
 let ti=0;
@@ -2412,16 +2496,23 @@ function frame(t){
   }else if(MOBILE_SAY){
     if($say.style.display==='none')$say.style.display='';
     // Handy: Text nativ scharf im HTML-Band über der Szene
-    const txt=S.full.slice(0,Math.floor(S.shown));
-    if($say.textContent!==txt)$say.textContent=txt;
-    if($say.style.color!==S.col)$say.style.color=S.col;
-    // Schriftgröße am VOLLTEXT festmachen — sonst schrumpft sie mitten im Tippen
-    const fl=(S.full||'').length;
-    const cls=(fl>250?'xl':fl>190?'long':fl>130?'mid':'')+(S.narr?' narr':'');
-    if($say.className!==cls)$say.className=cls;
+    const esc=x=>x.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    const html=sayHTMLFrom(visibleSegs(Math.floor(S.shown)));
+    if($say.innerHTML!==html)$say.innerHTML=html;
+    // Schriftgröße messen, nicht raten: kleinste Stufe, bei der nichts abgeschnitten wird
+    if(S.sayKey!==S.full){
+      S.sayKey=S.full;
+      const steps=['','mid','long','xl'];
+      const keep=$say.innerHTML;
+      $say.innerHTML=fullSayHTML();
+      for(const st of steps){$say.className=st;if($say.scrollHeight<=$say.clientHeight)break;}
+      S.sayCls=$say.className;
+      $say.innerHTML=keep;
+    }
+    if($say.className!==S.sayCls)$say.className=S.sayCls||'';
   }else{
     const ax=S.who==='l'?(S._lx||W/2)+48:S.who==='k'?(S._kx||W/2)+48:S.who==='j'?280:W/2;
-    drawSay(S.full.slice(0,Math.floor(S.shown)),S.col,14,ax);
+    drawSay(visibleSegs(Math.floor(S.shown)),14,ax);
   }
 
   // Handy-Overlay am Ende: ihre Nachricht ploppt auf

@@ -37,6 +37,43 @@
   #mute:hover{color:#ffe066;border-color:#5a5a2a}
   li{-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
   #say{display:none}
+  /* Titelbild: eigenes Key-Art, am Handy bildschirmfüllend */
+  #title{position:fixed;inset:0;background:#080418;display:none;align-items:center;justify-content:center;z-index:9;cursor:pointer}
+  #title.on{display:flex}
+  #tc{height:100%;width:auto;max-width:100%;image-rendering:pixelated;display:block}
+  /* Das Handy im Vorspiel: echtes HTML, damit die Schrift scharf bleibt */
+  #phone{display:none;background:#07060f;border:2px solid #16162a;border-bottom:none;padding:14px 0 10px;justify-content:center}
+  #phone.on{display:flex}
+  #phone .ph{width:min(330px,88vw);background:#0a0c12;border:3px solid #1b1d26;border-radius:20px;
+             padding:6px 6px 10px;box-shadow:0 6px 24px rgba(0,0,0,.5)}
+  #phone .bar{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#7a8aa4;
+              padding:4px 10px 8px;letter-spacing:.4px}
+  #phone .bar #phtitle{color:#f0b8c8;font-weight:700}
+  #phone .body{background:#0b0f18;border-radius:14px;padding:10px;min-height:300px}
+  #phone .pic{width:100%;height:200px;object-fit:cover;object-position:center 18%;border-radius:10px;display:block;background:#4a3a72}
+  #phone .nm{font-size:19px;font-weight:700;color:#f0b8c8;margin:9px 0 2px}
+  #phone .sub{font-size:14px;color:#e8eaf0;margin-bottom:2px}
+  #phone .loc{font-size:13px;color:#8fe6d2;margin-bottom:9px}
+  #phone .prompt{background:#182233;border-radius:10px;padding:8px 10px;margin-bottom:8px}
+  #phone .prompt b{display:block;font-size:12px;color:#7f9ad0;font-weight:700;margin-bottom:3px;letter-spacing:.3px}
+  #phone .prompt span{font-size:15px;color:#e8eaf0;line-height:1.35}
+  #phone .bub{max-width:78%;padding:8px 11px;border-radius:14px;margin-bottom:8px;font-size:15px;line-height:1.35;
+              word-wrap:break-word}
+  #phone .bub.her{background:#242b3a;color:#e8eaf0;border-bottom-left-radius:4px}
+  #phone .bub.me{background:#1f4f8a;color:#dceaff;margin-left:auto;border-bottom-right-radius:4px}
+  #phone .who{font-size:11px;color:#8b93a7;letter-spacing:.4px;margin:0 4px 2px}
+  #phone .who.me{text-align:right}
+  #phone .match{text-align:center;padding:6px 0 2px;
+                background:linear-gradient(#6a1f48,#a83a63);border-radius:12px}
+  #phone .match h2{font-size:26px;line-height:1.05;color:#ffe066;margin:12px 0 4px;
+                   text-shadow:2px 2px 0 #2a0c1e;letter-spacing:1px}
+  #phone .match .pair{display:flex;justify-content:center;gap:10px;margin:12px 0 6px}
+  #phone .match .pair figure{margin:0}
+  #phone .match .pair img{width:96px;height:96px;border-radius:50%;border:3px solid #fff;background:#4a3a72;display:block}
+  #phone .match .pair figcaption{font-size:12px;color:#ffe9f2;margin-top:5px}
+  #phone .match p{font-size:15px;color:#ffd9e6;margin:6px 0 12px}
+  #phone .match .btn{background:#fff;color:#a83a63;font-weight:700;font-size:14px;border-radius:10px;
+                     padding:11px 0;margin:0 14px 14px;letter-spacing:.6px}
   @media (max-width:700px){
     body{padding:0;align-items:flex-start}
     #frame{padding-top:6px}
@@ -56,13 +93,22 @@
     li:before{top:9px}
     li{position:relative}
     #stats{font-size:10px;margin-top:6px;padding-top:6px}
+    #phone{padding:10px 0 8px}
+    #phone .ph{width:min(340px,94vw)}
+    #phone .body{min-height:0}
+    #phone .pic{height:186px}
   }
 </style>
 </head>
 <body>
+<div id="title"><canvas id="tc" width="420" height="700"></canvas></div>
 <div id="frame">
   <div id="say"></div>
   <canvas id="c" width="480" height="300"></canvas>
+  <div id="phone" hidden><div class="ph">
+    <div class="bar"><span id="phclock">19:12</span><span id="phtitle">hinge</span><span id="phbatt">72%</span></div>
+    <div class="body" id="phbody"></div>
+  </div></div>
   <div id="ui">
     <div id="hint">…</div>
     <ul id="choices"></ul>
@@ -74,10 +120,118 @@
 "use strict";
 
 const W=480,H=300;
-const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+const cv=document.getElementById('c');
+let ctx=cv.getContext('2d');
+const CTX=()=>ctx, SETCTX=c=>{ctx=c;};
 ctx.imageSmoothingEnabled=false;
 const $ch=document.getElementById('choices'),$hint=document.getElementById('hint'),
       $sline=document.getElementById('sline'),$mute=document.getElementById('mute');
+/* ================= Titelbild: eigenes Key-Art im Hochformat ================= */
+const tcv=document.getElementById('tc'), tx=tcv.getContext('2d');
+tx.imageSmoothingEnabled=false;
+const $title=document.getElementById('title');
+function drawTitleArt(t){
+  const TW=tcv.width, TH=tcv.height, c=tx;
+  const R=(x,y,w,h,col)=>{c.fillStyle=col;c.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h));};
+  const P=(pts,col)=>{c.fillStyle=col;c.beginPath();c.moveTo(pts[0][0],pts[0][1]);
+    for(let i=1;i<pts.length;i++)c.lineTo(pts[i][0],pts[i][1]);c.closePath();c.fill();};
+  // Nachthimmel
+  const g=c.createLinearGradient(0,0,0,TH*0.66);
+  g.addColorStop(0,'#150c34');g.addColorStop(0.5,'#1e1552');g.addColorStop(1,'#33246f');
+  c.fillStyle=g;c.fillRect(0,0,TW,TH*0.66);
+  for(let i=0;i<170;i++){
+    const sx=(i*67)%TW, sy=(i*151)%Math.round(TH*0.55), tw=0.5+0.5*Math.sin(t/700+i);
+    R(sx,sy,2,2,`rgba(255,244,214,${0.16+tw*0.5})`);
+  }
+  for(let i=0;i<12;i++)R((i*97)%TW-60,26+i*24,TW*0.6,5,'rgba(96,74,158,0.14)');
+  // Mond
+  const mx=TW*0.70,my=TH*0.34;
+  c.fillStyle='rgba(255,236,170,0.09)';c.beginPath();c.arc(mx,my,46,0,7);c.fill();
+  c.fillStyle='rgba(255,240,190,0.15)';c.beginPath();c.arc(mx,my,25,0,7);c.fill();
+  c.fillStyle='#ffeaa0';c.beginPath();c.arc(mx,my,14,0,7);c.fill();
+  // Stadt am Horizont
+  const sky=TH*0.60;
+  for(const[hx,hw,hh]of [[40,64,104],[96,44,74],[136,54,128],[186,38,88],[220,60,112],[276,40,72],[310,54,104]]){
+    R(hx,sky-hh,hw,hh,'#160f36');
+    for(let wy=sky-hh+12;wy<sky-10;wy+=15)for(let wx=hx+7;wx<hx+hw-8;wx+=12)
+      if(((wx*5+wy*11)%7)<3)R(wx,wy,4,6,'rgba(240,196,110,0.8)');
+  }
+  // Der Atem-Raum: Leuchtfenster mittig, Kegel auf den nassen Asphalt
+  R(TW*0.40,sky-92,TW*0.22,92,'#241a4c');
+  R(TW*0.415,sky-78,TW*0.19,54,'#f4c268');
+  R(TW*0.415,sky-78,TW*0.19,7,'#ffe9b0');
+  R(TW*0.40,sky-100,TW*0.22,10,'#181040');
+  P([[TW*0.40,sky-24],[TW*0.62,sky-24],[TW*0.90,TH],[TW*0.14,TH]],'rgba(255,206,120,0.17)');
+  // Boden + Spiegelung
+  const gr=c.createLinearGradient(0,sky,0,TH);
+  gr.addColorStop(0,'#241b46');gr.addColorStop(1,'#100b26');
+  c.fillStyle=gr;c.fillRect(0,sky,TW,TH-sky);
+  for(let i=0;i<34;i++){
+    const ry=sky+10+i*8, rw=8+((i*13)%22), rx=TW*0.50+Math.sin(i*0.7)*22-rw/2;
+    R(rx,ry,rw,2,`rgba(255,214,140,${0.05+((i*7)%4)/34})`);
+  }
+  // Gehweg mit Fluchtfugen, damit der Boden trägt
+  for(let x=-40;x<=TW+40;x+=54){
+    const fx0=TW*0.5+(x-TW*0.5)*0.55;
+    P([[x,TH],[x+5,TH],[fx0+3,sky+6],[fx0,sky+6]],'rgba(12,8,32,0.5)');
+  }
+  R(0,sky,TW,3,'#463a7e');
+  // Dunkler Rahmen: unregelmäßiges Blattwerk, nur an den Rändern
+  R(0,0,26,TH,'#0a0620');R(TW-24,0,24,TH,'#0a0620');
+  for(let i=0;i<18;i++){
+    const y=i*40-8, d1=10+((i*37)%16), d2=9+((i*53)%18);
+    P([[26,y],[26+d1,y+9],[26+d1*0.6,y+20],[26+d1*0.95,y+31],[26,y+40]],'#0a0620');
+    P([[TW-24,y+10],[TW-24-d2,y+19],[TW-24-d2*0.55,y+29],[TW-24-d2*0.9,y+39],[TW-24,y+48]],'#0a0620');
+  }
+  // Lauren im Vordergrund links
+  const lsc=3.1, lTop=TH-89*lsc-6;
+  c.save();c.translate(TW*0.13,lTop);c.scale(lsc,lsc);
+  const oldCtx=CTX();SETCTX(c);
+  figure(0,0,1,LAUREN,t,0.5+0.5*Math.sin(t/1500),false,0.9,false,'neutral',0,false,false,null,1,false);
+  SETCTX(oldCtx);c.restore();
+  // ---------- Typografie ----------
+  const LEFT=64, MAXW=TW-LEFT-34;
+  c.textBaseline='top';c.textAlign='left';
+  const fit=(str,px0,weight)=>{                       // Größe so wählen, dass es reinpasst
+    let px=px0;
+    do{c.font=weight+' '+px+'px Georgia,"Times New Roman",serif';px-=1;}
+    while(c.measureText(str).width>MAXW&&px>12);
+    return px+1;
+  };
+  // Klammer links
+  R(30,58,8,300,'#f6e06a');R(30,58,30,8,'#f6e06a');R(30,350,30,8,'#f6e06a');
+  const s0='Ich will atmen lernen';
+  const p0=fit(s0,25,'700');
+  c.font='700 '+p0+'px Georgia,"Times New Roman",serif';
+  c.fillStyle='#120a24';c.fillText(s0,LEFT+2,68+2);
+  c.fillStyle='#fdf6e0';c.fillText(s0,LEFT,68);
+  const big=(str,y)=>{
+    const px=fit(str,86,'700');
+    c.font='700 '+px+'px Georgia,"Times New Roman",serif';
+    c.lineJoin='round';
+    c.strokeStyle='#0d0722';c.lineWidth=px*0.16;c.strokeText(str,LEFT,y);
+    const lg=c.createLinearGradient(0,y,0,y+px);
+    lg.addColorStop(0,'#fff8cc');lg.addColorStop(0.52,'#f6e06a');lg.addColorStop(1,'#dcae32');
+    c.fillStyle=lg;c.fillText(str,LEFT,y);
+    return px;
+  };
+  const h1=big('EIN DATE',102);
+  big('MIT LAUREN',102+h1*0.96);
+  const s3='frei nach einer wahren Verabredung';
+  const p3=fit(s3,16,'700');
+  c.font='700 '+p3+'px Georgia,"Times New Roman",serif';
+  c.fillStyle='#120a24';c.fillText(s3,LEFT+1,102+h1*2.02+1);
+  c.fillStyle='#f6e06a';c.fillText(s3,LEFT,102+h1*2.02);
+  // Startaufforderung
+  if(Math.sin(t/380)>0){
+    c.font='700 19px Georgia,"Times New Roman",serif';
+    const s4=(TOUCH?'Tippen':'Klicken')+', um anzufangen';
+    const w=c.measureText(s4).width;
+    c.fillStyle='rgba(8,4,20,0.75)';c.fillRect(TW/2-w/2-16,TH-70,w+32,34);
+    c.fillStyle='#fdf6e0';c.fillText(s4,TW/2-w/2,TH-62);
+  }
+}
+
 const TOUCH=matchMedia('(pointer:coarse)').matches;
 /* Hochkant/Handy: Sprechtext als HTML-Band ÜBER der Szene — native Schärfe, Szene bleibt frei */
 const MQ_SAY=matchMedia('(max-width:700px)');
@@ -1493,117 +1647,77 @@ function portrait(cx,cy,r,P,t,face){
 }
 function introPop(){return Math.min(1,((performance.now()-(S.intro?S.intro.t0:0))/1000)/0.55);}
 
-function sceneProfile(t){
-  const sc=drawDevice(t,introPop());
-  statusbar(sc,'hinge','#f0b8c8','19:12',72);
-  const fx=sc.x+8,fy=sc.y+22,fw=sc.w-16,fh=104;
-  px(fx-1,fy-1,fw+2,fh+2,'#1c2536');
-  ctx.save();ctx.beginPath();ctx.rect(fx,fy,fw,fh);ctx.clip();
-  dgrad(fx,fy,fw,fh,['#3a2d5e','#4a3a72','#5b4a86']);
-  ctx.translate(fx+fw/2-38,fy-12);
-  figure(0,0,1.68,LAUREN,t,0.5+0.5*Math.sin(t/1400),false,0.9,false,'neutral',0,false,false,null,0.4,false);
-  ctx.restore();
-  let y=fy+fh+7;
-  txt('LAUREN, 34',fx,y,13,'#f0b8c8',true);y+=15;
-  txt('Dichterin & Energieheilerin',fx,y,10,'#e8eaf0');y+=12;
-  txt('Französin · München · 4 km',fx,y,9,'#8fe6d2');y+=14;
-  const prompts=[
-    ['Meine Liebessprache','Proteinriegel. Schokolade,','vegan. Nicht verhandelbar.'],
-    ['Mein Gedicht von heute','„München atmet flach.','Isch auch."'],
-  ];
-  for(const p of prompts){
-    card(fx,y,fw,42);
-    txt(p[0],fx+7,y+5,9,'#7f9ad0',true);
-    txt(p[1],fx+7,y+17,10,'#e8eaf0');
-    txt(p[2],fx+7,y+29,10,'#e8eaf0');
-    y+=46;
+/* ---------- Vorspiel am Handy: echtes HTML, damit die Schrift scharf ist ---------- */
+const $phone=document.getElementById('phone'), $phbody=document.getElementById('phbody'),
+      $phclock=document.getElementById('phclock'), $phtitle=document.getElementById('phtitle'),
+      $phbatt=document.getElementById('phbatt');
+let PORTRAIT={};
+function renderPortrait(P,face,size,mode){
+  const off=document.createElement('canvas');off.width=off.height=size;
+  const oc=off.getContext('2d');oc.imageSmoothingEnabled=false;
+  const grd=oc.createLinearGradient(0,0,0,size);
+  grd.addColorStop(0,'#3a2d5e');grd.addColorStop(1,'#5b4a86');
+  oc.fillStyle=grd;oc.fillRect(0,0,size,size);
+  const old=CTX();SETCTX(oc);
+  const sc=(mode==='circle')?size/46:size/70;                 // Kreis: Kopf füllt; Karte: Kopf + Rumpf
+  const ty=(mode==='circle')?size/2-15*sc:size*0.02;
+  oc.save();oc.translate(size/2-24*sc,ty);
+  figure(0,0,sc,P,1200,0.5,false,0.9,false,'neutral',0,false,false,null,face,false);
+  oc.restore();SETCTX(old);
+  return off.toDataURL();
+}
+function portraits(){
+  if(!PORTRAIT.l){
+    PORTRAIT.l=renderPortrait(LAUREN,0.4,260,'card');
+    PORTRAIT.lr=renderPortrait(LAUREN,0.7,200,'circle');
+    PORTRAIT.k=renderPortrait(KEVFIG,-0.7,200,'circle');
+  }
+  return PORTRAIT;
+}
+function phoneShow(screen){
+  const p=portraits();
+  $phone.classList.add('on');$phone.hidden=false;
+  cv.style.display='none';
+  if(screen==='profile'){
+    $phclock.textContent='19:12';$phtitle.textContent='hinge';$phbatt.textContent='72%';
+    $phbody.innerHTML=
+      '<img class="pic" src="'+p.l+'" alt="Lauren">'+
+      '<div class="nm">Lauren, 34</div>'+
+      '<div class="sub">Dichterin &amp; Energieheilerin</div>'+
+      '<div class="loc">Französin · München · 4 km</div>'+
+      '<div class="prompt"><b>MEINE LIEBESSPRACHE</b><span>Proteinriegel. Schokolade, vegan. Nicht verhandelbar.</span></div>'+
+      '<div class="prompt"><b>MEIN GEDICHT VON HEUTE</b><span>„München atmet flach. Isch auch."</span></div>';
+  }else if(screen==='match'){
+    $phclock.textContent='22:41';$phtitle.textContent='hinge';$phbatt.textContent='54%';
+    $phbody.innerHTML=
+      '<div class="match"><h2>ES HAT<br>GEMATCHT!</h2>'+
+      '<div class="pair">'+
+        '<figure><img src="'+p.lr+'" alt="Lauren"><figcaption>Lauren</figcaption></figure>'+
+        '<figure><img src="'+p.k+'" alt="Du"><figcaption>du</figcaption></figure>'+
+      '</div>'+
+      '<p>Ihr mögt euch.</p>'+
+      '<div class="btn">NACHRICHT SCHREIBEN</div></div>';
+  }else{
+    const all=S.intro&&S.intro.all;
+    $phclock.textContent=all?'19:38':'19:12';$phtitle.textContent='Lauren ✦';$phbatt.textContent=all?'66%':'70%';
+    const MSG=[
+      ['k','Geh grad zum Rewe. Soll ich dir was mitbringen?'],
+      ['l','Koro Proteinbar. Schokolade, vegan.'],
+      ['l','Donnerstag Breathwork? 2 Std atmen, bis man weint oder lacht.'],
+      ['k','Klar. Komme mit dem E-Bike.'],
+      ['l','19:50. Atem Raum ✦'],
+    ];
+    const upto=all?MSG.length:2;
+    $phbody.innerHTML=MSG.slice(0,upto).map(([w,txt],i)=>{
+      const me=w==='k';
+      const tag=(i===0||MSG[i-1][0]!==w)?'<div class="who'+(me?' me':'')+'">'+(me?'du':'Lauren')+'</div>':'';
+      return tag+'<div class="bub '+(me?'me':'her')+'">'+txt+'</div>';
+    }).join('');
   }
 }
+function phoneHide(){$phone.classList.remove('on');$phone.hidden=true;cv.style.display='';}
 
-function sceneMatch(t){
-  const sc=drawDevice(t,introPop());
-  const el=(t-(S.intro?S.intro.t0:t))/1000;
-  dgrad(sc.x,sc.y,sc.w,sc.h,['#3a1030','#6a1f48','#a83a63']);
-  statusbar(sc,'hinge','#ffd9e6','22:41',54);
-  // Funken
-  for(let i=0;i<26;i++){
-    const a=(i*97)%360, rr=18+((i*53)%70)+Math.sin(el*2+i)*4;
-    const cxp=sc.x+sc.w/2+Math.cos(a)*rr, cyp=sc.y+118+Math.sin(a)*rr*0.8;
-    px(Math.round(cxp),Math.round(cyp),2,2,i%3?'rgba(255,214,120,0.75)':'rgba(255,255,255,0.65)');
-  }
-  const pop=Math.min(1,Math.max(0,(el-0.25)/0.4));
-  ctx.font='bold 21px ui-monospace,"Courier New",monospace';
-  const s1='ES HAT';
-  const s2='GEMATCHT!';
-  ctx.textBaseline='top';
-  const w1=ctx.measureText(s1).width,w2=ctx.measureText(s2).width;
-  ctx.fillStyle='#2a0c1e';ctx.fillText(s1,sc.x+sc.w/2-w1/2+2,sc.y+34+2);ctx.fillText(s2,sc.x+sc.w/2-w2/2+2,sc.y+58+2);
-  ctx.fillStyle='#ffe066';ctx.fillText(s1,sc.x+sc.w/2-w1/2,sc.y+34);ctx.fillText(s2,sc.x+sc.w/2-w2/2,sc.y+58);
-  const r=34+pop*4;
-  portrait(sc.x+sc.w/2-36,sc.y+120,r,LAUREN,t,0.6);
-  portrait(sc.x+sc.w/2+36,sc.y+120,r,KEVFIG,t,-0.6);
-  ctx.font='bold 9px ui-monospace,"Courier New",monospace';
-  ['Lauren','du'].forEach((lbl,i)=>{
-    const cxp=sc.x+sc.w/2+(i?34:-34), w=ctx.measureText(lbl).width;
-    px(Math.round(cxp-w/2-4),sc.y+160,Math.round(w+8),12,'rgba(20,6,16,0.6)');
-    txt(lbl,Math.round(cxp-w/2),sc.y+162,9,'#ffe9f2',true);
-  });
-  ctx.font='bold 11px ui-monospace,"Courier New",monospace';
-  const s3='Ihr mögt euch.';
-  const w3=ctx.measureText(s3).width;
-  txt(s3,sc.x+sc.w/2-w3/2,sc.y+180,11,'#ffd9e6',true);
-  // Button
-  const bw=sc.w-40,bx=sc.x+20,by=sc.y+204;
-  px(bx,by,bw,26,'#ffffff');px(bx+1,by+1,bw-2,24,'#f4f4f8');
-  ctx.font='bold 11px ui-monospace,"Courier New",monospace';
-  const s4='NACHRICHT SCHREIBEN';
-  const w4=ctx.measureText(s4).width;
-  txt(s4,sc.x+sc.w/2-w4/2,by+8,11,'#a83a63',true);
-  if(Math.sin(t/300)>0)px(bx,by,bw,26,'rgba(255,224,102,0.16)');
-}
-
-function sceneChat(t){
-  const sc=drawDevice(t,introPop());
-  statusbar(sc,'Lauren ✦','#f0b8c8',(S.intro&&S.intro.all)?'19:38':'19:12',(S.intro&&S.intro.all)?66:70);
-  const MSG=[
-    ['k','Geh grad zum Rewe. Soll ich dir was mitbringen?'],
-    ['l','Koro Proteinbar. Schokolade, vegan.'],
-    ['l','Donnerstag Breathwork? 2 Std atmen, bis man weint oder lacht.'],
-    ['k','Klar. Komme mit dem E-Bike.'],
-    ['l','19:50. Atem Raum ✦'],
-  ];
-  const el=(t-(S.intro?S.intro.t0:t))/1000;
-  const all=S.intro&&S.intro.all;
-  const shown=all?MSG.length:Math.min(MSG.length,Math.floor(el/0.8)+1);
-  // Blasen vermessen
-  const bubbles=[];let total=0;
-  for(let i=0;i<shown;i++){
-    const lines=wrapT(MSG[i][1],19);
-    const h=lines.length*14+9;
-    bubbles.push({who:MSG[i][0],lines,h});total+=h+4;
-  }
-  const top=sc.y+18,viewH=sc.h-22;
-  let y=top+Math.min(0,viewH-total);                       // neue Nachrichten schieben nach oben
-  ctx.save();ctx.beginPath();ctx.rect(sc.x,top,sc.w,viewH);ctx.clip();
-  for(const b of bubbles){
-    let wmax=0;for(const ln of b.lines)wmax=Math.max(wmax,ln.length*6.7);
-    const bw=Math.min(Math.round(sc.w*0.78),wmax+14);
-    const mine=b.who==='k';
-    const bx=mine?sc.x+sc.w-8-bw:sc.x+8;
-    px(bx,y,bw,b.h,mine?'#1f4f8a':'#242b3a');
-    px(bx,y,bw,1,mine?'#2f66ab':'#2e3648');
-    b.lines.forEach((ln,i)=>txt(ln,bx+7,y+5+i*14,11,mine?'#dceaff':'#e8eaf0'));
-    y+=b.h+4;
-  }
-  if(shown<MSG.length){
-    px(sc.x+8,y,26,14,'#242b3a');
-    const d=Math.floor((t/260)%3);
-    for(let i=0;i<3;i++)px(sc.x+12+i*7,y+6,3,3,i<=d?'#8b93a7':'#3a4257');
-  }
-  ctx.restore();
-}
-
-const SCENE={front:sceneFront,studio:sceneStudio,street:sceneStreet,title:sceneTitle,profile:sceneProfile,match:sceneMatch,chat:sceneChat};
+const SCENE={front:sceneFront,studio:sceneStudio,street:sceneStreet,title:sceneTitle};
 
 /* ================= Text à la Monkey Island ================= */
 function wrapT(s,max){const o=[];let l='';for(const w of s.split(' ')){if((l+w).length>max){o.push(l.trim());l='';}l+=w+' ';}if(l.trim())o.push(l.trim());return o;}
@@ -1741,25 +1855,24 @@ function feedback(sym,cringe){
 
 /* ---- Vorspiel am Handy: ihr Profil, dann der Chat, aus dem das Date entstand ---- */
 function introProfile(){
-  S.mode='intro';S.scene='profile';S.intro={t0:performance.now()};
+  S.mode='intro';S.intro={t0:performance.now()};phoneShow('profile');
   line('n','Ihr Profil. Du kennst es auswendig.');
   opts([{t:'Weiter.',go:introMatch}],'Hinge · vor sechs Tagen');
 }
 function introMatch(){
-  S.mode='intro';S.scene='match';S.intro={t0:performance.now()};
-  SFX.win();
+  S.mode='intro';S.intro={t0:performance.now()};phoneShow('match');SFX.win();
   line('n','Sechs Tage vor dem Date, 22:41.');
-  opts([{t:'Ihr schreiben.',go:introChat}],'Jetzt musst du was sagen');
+  opts([{t:'Ihr schreiben.',go:introChat}],'Es hat gematcht');
 }
 function introChat(){
-  S.mode='intro';S.scene='chat';S.intro={t0:performance.now(),all:false};
-  line('n','Euer Chat.');
-  opts([{t:'Weiterlesen.',go:introReady}],'Wie alles anfing');
+  S.mode='intro';S.intro={t0:performance.now(),all:false};phoneShow('chat');
+  line('n','Deine erste Nachricht. Sie antwortet nach vier Minuten.');
+  opts([{t:'Weiterlesen.',go:introReady}],'Euer Chat');
 }
 function introReady(){
-  S.mode='intro';S.scene='chat';S.intro={t0:performance.now(),all:true};
+  S.mode='intro';S.intro={t0:performance.now(),all:true};phoneShow('chat');
   line('n','19:40. Zeit loszufahren.');
-  opts([{t:'Jacke an, Rad raus.',go:()=>{S.mode='talk';S.intro=null;SFX.page();talkBeat();}}],'Heute Abend');
+  opts([{t:'Jacke an, Rad raus.',go:()=>{phoneHide();S.mode='talk';S.intro=null;SFX.page();talkBeat();}}],'Heute Abend');
 }
 
 let ti=0;
@@ -2072,7 +2185,15 @@ function reset(){
 
 /* ================= Render ================= */
 let last=0,blipCount=0;
+function titleSync(){
+  const on=(S.mode==='title');
+  $title.classList.toggle('on',on);
+  document.getElementById('frame').style.visibility=on?'hidden':'';
+}
+$title.addEventListener('pointerdown',e=>{e.preventDefault();audioInit();SFX.page();S.mode='intro';titleSync();introProfile();});
 function frame(t){
+  if(S.mode==='title'){drawTitleArt(t);}
+  titleSync();
   const dt=Math.min(60,t-last)/1000;last=t;
 
   // Schreibmaschine
@@ -2257,52 +2378,9 @@ function frame(t){
     ctx.fillStyle='#ffe066';ctx.fillText(lbl,21,252);
   }
 
-  // Titel-Logo: gebogener Schriftzug mit Kontur, wie ein gemaltes Spiel-Logo
+  // Titelbild liegt als eigenes Overlay über allem (siehe #title)
   if(S.mode==='title'){
-    if(MOBILE_SAY){if($say.textContent!==''){$say.textContent='';$say.className='';}$say.style.display='none';}
-    PS=1;
-    px(0,0,W,H,'rgba(6,4,18,0.58)');
-    const arc=(str,cy,size,r0)=>{                       // Buchstaben einzeln auf einem flachen Bogen
-      ctx.font='bold '+size+'px ui-monospace,"Courier New",monospace';
-      ctx.textBaseline='middle';ctx.textAlign='center';
-      const ws=[];let total=0;
-      for(const ch of str){const w=ctx.measureText(ch).width*1.08;ws.push(w);total+=w;}
-      let x=W/2-total/2;
-      for(let i=0;i<str.length;i++){
-        const ch=str[i], w=ws[i], p=(i/(str.length-1||1))-0.5;
-        const yy=cy+p*p*r0*4 - r0;                       // leichter Bogen nach oben
-        ctx.save();ctx.translate(x+w/2,yy);ctx.rotate(p*0.07);
-        ctx.lineJoin='round';
-        ctx.strokeStyle='#1a0f2e';ctx.lineWidth=size*0.20;ctx.strokeText(ch,0,0);
-        ctx.strokeStyle='#000';ctx.lineWidth=size*0.07;ctx.strokeText(ch,0,0);
-        const g=ctx.createLinearGradient(0,-size*0.6,0,size*0.6);
-        g.addColorStop(0,'#fff3c0');g.addColorStop(0.42,'#ffd257');g.addColorStop(1,'#e08a2c');
-        ctx.fillStyle=g;ctx.fillText(ch,0,0);
-        ctx.fillStyle='rgba(255,255,255,0.55)';ctx.fillText(ch,0,-size*0.06);
-        ctx.globalCompositeOperation='source-over';
-        ctx.restore();
-        x+=w;
-      }
-    };
-    // Zierband hinter dem Logo
-    px(0,34,W,3,'rgba(255,214,120,0.30)');px(0,150,W,3,'rgba(255,214,120,0.30)');
-    ctx.textAlign='center';ctx.textBaseline='top';
-    ctx.font='bold 15px ui-monospace,"Courier New",monospace';
-    ctx.fillStyle='#0d0a20';ctx.fillText('E I N   D A T E   M I T',W/2+1,47);
-    ctx.fillStyle='#8fe6d2';ctx.fillText('E I N   D A T E   M I T',W/2,46);
-    arc('LAUREN',108,52,4);
-    // Rankenpunkte links/rechts vom Untertitel
-    ctx.font='bold 11px ui-monospace,"Courier New",monospace';
-    px(W/2-132,126,264,22,'rgba(8,5,20,0.9)');
-    ctx.fillStyle='#0d0a20';ctx.fillText('Ein Abend im Atem-Raum',W/2+1,133);
-    ctx.fillStyle='#ffe9b8';ctx.fillText('Ein Abend im Atem-Raum',W/2,132);
-    px(W/2-118,138,74,2,'rgba(255,233,184,0.5)');px(W/2+44,138,74,2,'rgba(255,233,184,0.5)');
-    if(Math.sin(t/380)>0){
-      ctx.font='bold 11px ui-monospace,"Courier New",monospace';
-      ctx.fillStyle='#000';ctx.fillText('— '+(TOUCH?'Tipp':'Klick')+', um anzufangen —',W/2+1,271);
-      ctx.fillStyle='#e8e2f4';ctx.fillText('— '+(TOUCH?'Tipp':'Klick')+', um anzufangen —',W/2,270);
-    }
-    ctx.textAlign='left';
+    if(MOBILE_SAY&&$say.textContent!==''){$say.textContent='';$say.className='';}
   }else if(MOBILE_SAY){
     if($say.style.display==='none')$say.style.display='';
     // Handy: Text nativ scharf im HTML-Band über der Szene

@@ -11,7 +11,7 @@
   body{
     background:#000;color:#e8e8f0;
     font-family:ui-monospace,"SF Mono",Menlo,Consolas,"Courier New",monospace;
-    display:flex;align-items:center;justify-content:center;padding:14px;
+    display:flex;align-items:flex-start;justify-content:center;padding:14px;
     -webkit-font-smoothing:none;
     -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
   }
@@ -22,7 +22,7 @@
     background:#000;border:2px solid #16162a;cursor:pointer;
     touch-action:none;user-select:none;
   }
-  #ui{background:#07070f;border:2px solid #16162a;border-top:none;padding:9px 12px 11px;min-height:132px}
+  #ui{background:#07070f;border:2px solid #16162a;border-top:none;padding:9px 12px 11px;min-height:176px}
   #hint{color:#7a7aa8;font-size:11px;letter-spacing:.6px;margin-bottom:7px;text-transform:uppercase}
   ul{list-style:none}
   li{padding:3px 6px 3px 18px;position:relative;cursor:pointer;font-size:14px;line-height:1.45;color:#cfc2e8}
@@ -63,6 +63,7 @@
   #phone .bub.me{background:#1f4f8a;color:#dceaff;margin-left:auto;border-bottom-right-radius:4px}
   #phone .who{font-size:11px;color:#8b93a7;letter-spacing:.4px;margin:0 4px 2px}
   #phone .who.me{text-align:right}
+  #phone .caret{opacity:.75;animation:blink 1s steps(1) infinite}
   #phone .typing{display:inline-flex;gap:4px;background:#242b3a;border-radius:14px;padding:10px 12px}
   #phone .typing span{width:6px;height:6px;border-radius:50%;background:#8b93a7;animation:blink 1.1s infinite}
   #phone .typing span:nth-child(2){animation-delay:.18s}
@@ -84,6 +85,7 @@
                border-radius:12px;padding:12px 0;letter-spacing:.6px;cursor:pointer;user-select:none;
                font-family:'Avenir Next',Avenir,'Segoe UI',system-ui,sans-serif}
   #phone .like:active{transform:translateY(1px)}
+  #phone .hinweis{margin-top:8px;text-align:center;font-size:13px;color:#ffb4c6;letter-spacing:.4px}
   #phone .skip{width:52px;text-align:center;background:#20283a;color:#8b93a7;border-radius:12px;padding:12px 0;font-size:15px}
   #phone .ph{position:relative;overflow:hidden}
   .heart{position:absolute;font-size:22px;pointer-events:none;animation:rise 1.5s ease-out forwards}
@@ -1682,10 +1684,10 @@ let PORTRAIT={};
 const CHAT=[
   ['k','Geh grad zum Rewe. Soll ich dir was mitbringen?'],
   ['l','Koro Proteinbar. Schokolade, vegan.'],
-  ['k','Notiert. Und sonst so, Donnerstag?'],
-  ['l','Donnerstag Breathwork? 2 Std atmen, bis man weint oder lacht.'],
-  ['k','Klar. Komme mit dem E-Bike.'],
-  ['l','19:50. Atem Raum ✦'],
+  ['k','Notiert. Ich hab Donnerstag Breathwork gebucht — 2 Std atmen, bis man weint oder lacht.'],
+  ['l','Isch komme mit.'],
+  ['k','Wir kennen uns seit vier Minuten.'],
+  ['l','Dann atmen wir uns kennen. 19:50, Atem Raum ✦'],
 ];
 function renderPortrait(P,face,size,mode){
   const off=document.createElement('canvas');off.width=off.height=size;
@@ -1722,7 +1724,8 @@ function phoneShow(screen){
       '<div class="loc">Französin · München · 4 km</div>'+
       '<div class="prompt"><b>MEINE LIEBESSPRACHE</b><span>Proteinriegel. Schokolade, vegan. Nicht verhandelbar.</span></div>'+
       '<div class="prompt"><b>MEIN GEDICHT VON HEUTE</b><span>„München atmet flach. Isch auch."</span></div>'+
-      '<div class="likebar"><div class="skip">✕</div><div class="like" id="likebtn">♥  LIKEN</div></div>';
+      '<div class="likebar"><div class="skip">✕</div><div class="like" id="likebtn">♥  LIKEN</div></div>'+
+      '<div class="hinweis" id="lhint" hidden>Erst lesen. Dann liken.</div>';
   }else if(screen==='match'){
     $phclock.textContent='22:41';$phtitle.textContent='hinge';$phbatt.textContent='54%';
     $phbody.innerHTML=
@@ -1734,15 +1737,76 @@ function phoneShow(screen){
       '<p>Ihr mögt euch.</p>'+
       '<div class="btn">NACHRICHT SCHREIBEN</div></div>';
   }else{
-    const step=(S.intro&&S.intro.step)||0;
-    $phclock.textContent=step>=CHAT.length?'19:38':'19:12';
-    $phtitle.textContent='Lauren ✦';$phbatt.textContent=step>=CHAT.length?'66%':'70%';
-    $phbody.innerHTML=CHAT.slice(0,step).map(([w,txt],i)=>{
-      const me=w==='k';
-      const tag=(i===0||CHAT[i-1][0]!==w)?'<div class="who'+(me?' me':'')+'">'+(me?'du':'Lauren')+'</div>':'';
-      return tag+'<div class="bub '+(me?'me':'her')+'">'+txt+'</div>';
-    }).join('')+(step<CHAT.length?'<div class="typing"><span></span><span></span><span></span></div>':'');
-    $phbody.scrollTop=$phbody.scrollHeight;
+    renderChat();
+  }
+}
+/* Baut den Chat auf: deine Nachricht tippt sich, ihre kommt nach den drei Punkten */
+let chatTimer=null;
+function renderChat(){
+  const st=S.intro||{};
+  const done=st.done||0;                      // fertig angezeigte Nachrichten
+  const typing=st.typing;                     // {i, shown} — deine Nachricht im Tippen
+  const waiting=st.waiting;                   // sie schreibt gerade
+  $phclock.textContent=done>=CHAT.length?'19:38':'19:12';
+  $phtitle.textContent='Lauren ✦';
+  $phbatt.textContent=done>=CHAT.length?'66%':'70%';
+  let html='',lastW=null;
+  for(let i=0;i<done;i++){
+    const [w,txt]=CHAT[i];const me=w==='k';
+    html+=(w!==lastW?'<div class="who'+(me?' me':'')+'">'+(me?'du':'Lauren')+'</div>':'');
+    html+='<div class="bub '+(me?'me':'her')+'">'+txt+'</div>';lastW=w;
+  }
+  if(typing){
+    const [w,txt]=CHAT[typing.i];
+    html+=(w!==lastW?'<div class="who me">du</div>':'');
+    html+='<div class="bub me">'+txt.slice(0,typing.shown)+'<span class="caret">▌</span></div>';
+    lastW=w;
+  }
+  if(waiting){
+    html+=(lastW!=='l'?'<div class="who">Lauren</div>':'');
+    html+='<div class="typing"><span></span><span></span><span></span></div>';
+  }
+  $phbody.innerHTML=html;
+  $phbody.scrollTop=$phbody.scrollHeight;
+}
+function chatStep(i){
+  clearTimeout(chatTimer);
+  if(i>=CHAT.length){
+    S.intro={done:CHAT.length};renderChat();
+    line('n','Und so wurde aus einer Rewe-Frage ein Date.');
+    return opts([{t:'Jacke an, Rad raus.',go:()=>{phoneHide();S.mode='talk';S.intro=null;SFX.page();talkBeat();}}],'19:40 · Zeit loszufahren');
+  }
+  const [who,txt]=CHAT[i];
+  if(who==='k'){
+    // Du tippst — Buchstabe für Buchstabe
+    S.intro={done:i,typing:{i,shown:0}};renderChat();
+    line('n',i===0?'Du tippst das Erstbeste, was dir einfällt.':'Du tippst.');
+    opts([],'…');
+    const tick=()=>{
+      const t=S.intro&&S.intro.typing;if(!t)return;
+      t.shown=Math.min(txt.length,t.shown+2);
+      renderChat();
+      if(t.shown<txt.length){chatTimer=setTimeout(tick,28);}
+      else{
+        S.intro={done:i+1};renderChat();SFX.blip();
+        opts([{t:'Abschicken.',go:()=>{
+          SFX.page();
+          // erst nach dem Abschicken fängt sie an zu schreiben
+          const next=i+1;
+          if(next<CHAT.length&&CHAT[next][0]==='l'){
+            S.intro={done:i+1,waiting:true};renderChat();
+            line('n','Sie schreibt …');opts([],'…');
+            chatTimer=setTimeout(()=>chatStep(next),1400);
+          }else chatStep(next);
+        }}],'Deine Nachricht');
+      }
+    };
+    chatTimer=setTimeout(tick,260);
+  }else{
+    // Ihre Nachricht steht sofort da
+    S.intro={done:i+1};renderChat();SFX.ok();
+    line('n',i===CHAT.length-1?'Und damit war es beschlossen.':'Sie antwortet.');
+    opts([{t:'Weiter.',go:()=>chatStep(i+1)}],'Euer Chat');
   }
 }
 function hearts(){
@@ -1759,6 +1823,26 @@ function hearts(){
   }
   tone(660,0.12,'sine',0.05);tone(880,0.16,'sine',0.045,0.09);
 }
+function introAdvance(){
+  if(S.typing){skipTyping();return;}
+  if(S.pending&&S.pending.length===1){const only=S.pending[0];S.pending=null;$ch.innerHTML='';only.go();}
+}
+document.getElementById('phone').addEventListener('pointerdown',e=>{
+  e.preventDefault();audioInit();
+  const onLike=e.target&&(e.target.id==='likebtn'||(e.target.closest&&e.target.closest('#likebtn')));
+  if(onLike){
+    if(S.likeReady){S.likeReady=false;hearts();setTimeout(introMatch,1100);}
+    else{const h=document.getElementById('lhint');if(h)h.hidden=false;SFX.meh();}
+    return;
+  }
+  introAdvance();
+});
+// Auch neben dem Handy darf man klicken — nur nicht auf die Auswahlliste
+document.getElementById('frame').addEventListener('pointerdown',e=>{
+  if(S.mode!=='intro')return;
+  if(e.target.closest('#ui')||e.target.closest('#phone'))return;
+  e.preventDefault();audioInit();introAdvance();
+});
 function phoneHide(){$phone.classList.remove('on');$phone.hidden=true;cv.style.display='';}
 
 const SCENE={front:sceneFront,studio:sceneStudio,street:sceneStreet,title:sceneTitle};
@@ -1781,11 +1865,19 @@ function drawSay(segs,yTop,ax){
   }
   const cx0=(ax===undefined)?W/2:ax;
   let y=yTop;
+  // Abdunkeln, damit der Text auch über hellen Bildstellen lesbar bleibt
+  let bx=6;
+  if(rows.length){
+    let maxW=0;for(const r of rows)maxW=Math.max(maxW,r.text.length*CW);
+    const bw=Math.min(W-8,maxW+20);
+    bx=Math.round(Math.max(4,Math.min(W-4-bw,cx0-bw/2)));
+    px(bx,yTop-6,Math.round(bw),rows.length*15+11,'rgba(6,4,16,0.74)');
+    px(bx,yTop-6,Math.round(bw),1,'rgba(255,255,255,0.07)');
+  }
   for(const r of rows){
     ctx.font=(r.speak?'bold 13px':'13px')+' ui-monospace,"Courier New",monospace';
     ctx.textBaseline='top';
-    const wpx=r.text.length*CW;
-    const x=Math.round(Math.max(6,Math.min(W-6-wpx,cx0-wpx/2)));
+    const x=bx+10;                        // alle Zeilen bündig im Band
     ctx.fillStyle='#000';
     for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)if(dx||dy)ctx.fillText(r.text,x+dx,y+dy);
     ctx.fillStyle=r.col;ctx.fillText(r.text,x,y);
@@ -1912,7 +2004,7 @@ function skipTyping(){
 
 /* ================= AKT 1 — Smalltalk ================= */
 const RAW=[
- {sc:'front',who:'l',txt:'"Du bist Kevin, non? Der mit dem E-Bike aus dem Chat. Isch bin Lauren."',hint:'Vor dem Studio, ein Novemberabend, zehn vor acht',o:[
+ {sc:'front',who:'l',txt:'"Du bist Kevin, non? Der mit dem E-Bike, der hier atmen geht. Isch bin Lauren."',hint:'Vor dem Studio, ein Novemberabend, zehn vor acht',o:[
    ['"Es ist ein E-Bike. Das E ist wichtig."',1,0,'l','Sie: "Warum?" Du: "Damit ich nicht verschwitzt ankomme." Sie: "Mon dieu. Das ist so unsexy, dass es fast wieder geht."'],
    ['"Ja. Und du hattest das Gedicht im Profil."',2,0,'l','"Du hast es gelesen! Niemand liest die Prompts. Niemand. Warte — hatte isch eine Frage gestellt? Egal."'],
    ['"Nein."',1,1,'l','Sie schaut dich drei Sekunden an. "Doch. Isch spüre dein Feld. Es ist ein Kevin-Feld."'],
@@ -1933,18 +2025,18 @@ const RAW=[
  {sc:'studio',who:'l',txt:'"Und was machst du? Nicht beruflich. Isch meine, was machst du wirklisch."',hint:'Die Frage, auf die alles ankommt',o:[
    ['"Mein Nervensystem und ich reden gerade nicht miteinander."',2,0,'l','Sie: "Seit wann?" Du: "2019." Sie: "Dann ist das hier eine Paartherapie. Isch bin die Therapeutin, der Raum ist der Anwalt."'],
    ['"Ich denke darüber nach, wie Leute in zehn Jahren Geschichten erzählen."',2,0,'l','"Oh! Das ist auch Dichtung. Nur mit Budget." Sie sagt Budget wie ein Schimpfwort.'],
-   ['"Ich hab gelesen, man kann dabei weinen. Ich wollte das mal testen."',1,1,'l','Sie: "Du machst Breathwork als Produkttest." Du: "Ich arbeite mit Zukünften." Sie: "Das erklärt viel."'],
+   ['"Das hier mach ich alle paar Wochen. Sonst denk ich zu viel."',2,0,'l','"Und heute hast du eine Fremde mitgebracht." Kurze Pause. "Das war meine Idee, isch weiß."'],
    ['"Trend- und Innovationskram. Medien, KI, so was."',0,2,'l','"Ehm." Lange Pause. "Und das Wirklische?"']
  ]},
  {sc:'studio',who:'n',jon:1,txt:'Ein Mann mit Dutt, Stirnband und der Ruhe eines Möbelstücks kommt aus dem Hinterzimmer.',hint:'Der Kursleiter erscheint',o:[
    ['Du nickst ihm zu.',0,0,'j','"Namaste. Isch— äh. ICH bin Jonas." Er hat kurz ihren Akzent gespiegelt. Es war ein Versehen. Lauren hat es gehört.'],
    ['"Sind Sie der mit dem Atem?"',1,0,'j','"Ich bin Jonas. Und ja — ich bin der mit dem Atem. Alle hier haben einen, aber meiner ist versichert."'],
    ['Du schaust demonstrativ auf seine Zehensocken.',1,1,'j','"Die sind orthopädisch", sagt er, bevor du etwas sagen kannst. "Ich bin übrigens Jonas."'],
-   ['"Wir wollten gerade gehen."',0,2,'j','"Das sagen alle vor der ersten Welle. Ich bin Jonas. Nach der dritten will keiner mehr weg."']
+   ['"Sie ist zum ersten Mal hier. Ich nicht."',1,0,'j','"Dann weißt du ja, wie es geht." Er schaut Lauren an. "Und du weißt es gleich. Ich bin übrigens Jonas."']
  ]},
  {sc:'studio',who:'j',txt:'"Schön, dass ihr da seid. Ihr zwei kennt euch schon länger?"',hint:'Jonas mischt sich ein',o:[
-   ['"Seit vier Minuten."',2,0,'l','"Fünf. Er war zu früh. Isch mag das, das ist selten."'],
-   ['"Das ist ein Date, Jonas."',2,1,'j','"Wunderschön. Dann atmen wir das jetzt zusammen." Lauren schaut sehr interessiert auf ihre Sockenspitzen.'],
+   ['"Seit ungefähr vier Minuten."',2,0,'l','"Fünf. Und wir atmen gleich zwei Stunden zusammen. Isch finde das mutig von uns."'],
+   ['"Erstes Date. Sie hat sich eingeladen."',2,0,'l','"Isch habe gefragt, ob isch mitkommen darf. Das ist etwas anderes." Sie schaut sehr interessiert auf ihre Sockenspitzen.'],
    ['"Wir sind Kollegen." (Ihr seid keine Kollegen.)',0,2,'l','"Wir arbeiten beide", sagt Lauren. "Nur nicht zusammen. Und nicht am Gleichen. Und nicht —" Sie hört selbst auf.'],
    ['"Definiere kennen."',0,3,'n','Jonas nimmt die Frage ernst. Er redet neunzig Sekunden. Niemand rettet dich. Lauren isst ihren Riegel zu Ende.']
  ]}
@@ -1959,30 +2051,20 @@ function feedback(sym,cringe){
 
 /* ---- Vorspiel am Handy: ihr Profil, dann der Chat, aus dem das Date entstand ---- */
 function introProfile(){
-  S.mode='intro';S.intro={t0:performance.now()};phoneShow('profile');
+  S.mode='intro';S.intro={t0:performance.now()};S.likeReady=false;phoneShow('profile');
   line('n','Donnerstagabend, du wischst dich durch die App. Und dann das hier.');
   opts([{t:'Ihr Profil lesen.',go:introLike}],'Neu für dich · 4 km entfernt');
 }
 function introLike(){
-  S.mode='intro';S.intro={t0:performance.now()};phoneShow('profile');
+  S.mode='intro';S.intro={t0:performance.now()};S.likeReady=true;phoneShow('profile');
+  const h=document.getElementById('lhint');if(h)h.hidden=true;
   line('n','Dichterin und Energieheilerin. Und ein Riegel als Liebessprache. Du liest es zweimal.');
-  opts([{t:'♥ Liken.',go:()=>{hearts();setTimeout(introMatch,1100);}}],'Der Daumen weiß es schon');
+  opts([{t:'♥ Liken.',go:()=>{S.likeReady=false;hearts();setTimeout(introMatch,1100);}}],'Der Daumen weiß es schon');
 }
 function introMatch(){
   S.mode='intro';S.intro={t0:performance.now()};phoneShow('match');SFX.win();
   line('n','Sie hatte dich vorher schon geliked. 22:41.');
-  opts([{t:'Ihr schreiben.',go:()=>introChat(1)}],'Es hat gematcht');
-}
-function introChat(step){
-  S.mode='intro';S.intro={t0:performance.now(),step};phoneShow('chat');
-  if(step>=CHAT.length){
-    line('n','Und so wurde aus einer Rewe-Frage ein Date.');
-    return opts([{t:'Jacke an, Rad raus.',go:()=>{phoneHide();S.mode='talk';S.intro=null;SFX.page();talkBeat();}}],'19:40 · Zeit loszufahren');
-  }
-  const who=CHAT[step-1][0];
-  line('n',step===1?'Du fragst das Erstbeste, was dir einfällt.'
-       :(who==='l'?'Sie antwortet sofort.':'Du tippst weiter.'));
-  opts([{t:step===1?'Absenden.':'Weiter.',go:()=>{SFX.blip();introChat(step+1);}}],'Euer Chat');
+  opts([{t:'Ihr schreiben.',go:()=>{phoneShow('chat');chatStep(0);}}],'Es hat gematcht');
 }
 
 let ti=0;

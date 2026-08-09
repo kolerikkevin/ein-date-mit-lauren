@@ -270,8 +270,10 @@ try{MQ_SAY.addEventListener('change',syncSayMode);}catch(e){if(MQ_SAY.addListene
 addEventListener('resize',syncSayMode);
 const $say=document.getElementById('say');
 const BREATH_HINT=TOUCH
-  ?'Finger aufs Bild gedrückt halten = einatmen · loslassen = ausatmen'
-  :'Bild oder LEERTASTE gedrückt halten = einatmen · loslassen = ausatmen';
+  ?'Halten = einatmen, loslassen = ausatmen — bleib im hellen Streifen'
+  :'Gedrückt halten (Bild/LEERTASTE) = einatmen, loslassen = ausatmen — bleib im hellen Streifen';
+const HOLD_HINT=TOUCH?'Retention — nicht tippen, bis der Balken voll ist'
+                     :'Retention — nichts drücken, bis der Balken voll ist';
 cv.addEventListener('contextmenu',e=>e.preventDefault());   // kein Long-Press-Menü beim Atmen
 // Langes Halten beim Atmen darf keinen Text markieren (Touch-Selektion greift sonst aufs Sprech-Band über)
 document.getElementById('say').addEventListener('contextmenu',e=>e.preventDefault());
@@ -1832,7 +1834,7 @@ document.getElementById('phone').addEventListener('pointerdown',e=>{
   const onLike=e.target&&(e.target.id==='likebtn'||(e.target.closest&&e.target.closest('#likebtn')));
   if(onLike){
     if(S.likeReady){S.likeReady=false;hearts();setTimeout(introMatch,1100);}
-    else{const h=document.getElementById('lhint');if(h)h.hidden=false;SFX.meh();}
+    else{SFX.meh();introLike(true);}
     return;
   }
   introAdvance();
@@ -1994,7 +1996,8 @@ function visibleSegs(n){
   return out;
 }
 function beat(who,txt,list,hint){S.mood='neutral';S.moodT=0;line(who,txt);opts(list,hint);}
-function reply(who,txt,next){line(who,txt);opts([{t:'(weiter)',go:next}],'Weiter');}
+let replyCue=0;
+function reply(who,txt,next){line(who,txt);opts([{t:REPLYCUE[replyCue++%REPLYCUE.length],go:next}],'Weiter');}
 function skipTyping(){
   if(S.typing){S.shown=S.full.length;S.typing=false;flushOpts();
     if(S.autoNext)S.autoT=performance.now()+260;
@@ -2055,10 +2058,12 @@ function introProfile(){
   line('n','Donnerstagabend, du wischst dich durch die App. Und dann das hier.');
   opts([{t:'Ihr Profil lesen.',go:introLike}],'Neu für dich · 4 km entfernt');
 }
-function introLike(){
+function introLike(gerueffelt){
   S.mode='intro';S.intro={t0:performance.now()};S.likeReady=true;phoneShow('profile');
-  const h=document.getElementById('lhint');if(h)h.hidden=true;
-  line('n','Dichterin und Energieheilerin. Und ein Riegel als Liebessprache. Du liest es zweimal.');
+  const h=document.getElementById('lhint');if(h)h.hidden=!gerueffelt;
+  line('n',gerueffelt
+    ? 'Ja, ja. Dichterin und Energieheilerin, ein Riegel als Liebessprache. Jetzt hast du es gelesen.'
+    : 'Dichterin und Energieheilerin. Und ein Riegel als Liebessprache. Du liest es zweimal.');
   opts([{t:'♥ Liken.',go:()=>{S.likeReady=false;hearts();setTimeout(introMatch,1100);}}],'Der Daumen weiß es schon');
 }
 function introMatch(){
@@ -2067,6 +2072,8 @@ function introMatch(){
   opts([{t:'Ihr schreiben.',go:()=>{phoneShow('chat');chatStep(0);}}],'Es hat gematcht');
 }
 
+const REPLYCUE=['(nicken)','(mhm machen)','(nichts erwidern)','(kurz lachen)','(weiter)'];
+const BEATCUE=['(nicken)','(schlucken)','(weiteratmen)','(kurz überlegen)','(nichts sagen)','(lächeln, glaubst du)'];
 let ti=0;
 function talkBeat(){
   if(ti>=RAW.length)return preGauntlet();
@@ -2081,7 +2088,7 @@ function talkBeat(){
     feedback(o[1],o[2]);
     if(b.after){b.after();S.kbar=false;S.riegel=(b.sc==='front');}
     line(o[3],o[4]);
-    opts([{t:'(weiter)',go:()=>{ti++;SFX.page();talkBeat();}}],'Weiter');
+    opts([{t:BEATCUE[ti%BEATCUE.length],go:()=>{ti++;SFX.page();talkBeat();}}],'Weiter');
   }})),b.hint);
 }
 
@@ -2116,7 +2123,7 @@ const CHATTER=[
 
 function introGauntlet(){
   S.pose='sit';
-  line('j','"Wir atmen in drei Wellen. Haltet den Atem im Fenster. Das Fenster wandert."');
+  line('j','"Drei Runden. Ihr atmet schnell und verbunden — ein, aus, keine Pause dazwischen. Am Ende jeder Runde alles raus und halten, so lange ihr könnt."');
   opts([
     {t:'Anfangen.',go:()=>startWave(0)},
     {t:'Atmen überspringen.',go:skipGauntlet}
@@ -2142,9 +2149,39 @@ function startWave(i){
   breathStart();SFX.start();
   opts([{t:'Atmen überspringen.',go:skipGauntlet}],BREATH_HINT);
 }
+const HOLD_SECS=[6,8,10];
+function retentionStart(i){
+  S.mode='hold';S.retn={i,t0:performance.now(),need:HOLD_SECS[i]*1000,broke:false};
+  breathStop();
+  line('j',i===0?'"Und jetzt: alles raus. Und halten. Nicht atmen, bis es komisch wird."':'"Alles raus. Halten."');
+  opts([],HOLD_HINT);
+  tone(180,0.5,'sine',0.05,0,120);
+}
+function retentionDone(){
+  const r=S.retn;S.retn=null;S.mode='talk';
+  const i=r.i;S.waves=Math.max(S.waves,i+1);
+  if(r.broke){SFX.meh();line('n','Du schnappst nach Luft, früher als alle anderen. Jonas nickt, als wäre auch das ein Ergebnis.');}
+  else{SFX.win();line('n',i===0?'Nach ein paar Sekunden hört das Ziehen auf. Der Kopf wird auffällig still.':'Du hältst. Irgendwo hinter den Augen wird es warm.');}
+  if(i+1<NW){
+    opts([{t:'Weiteratmen.',go:()=>startWave(i+1)}],`Runde ${i+1} von ${NW} durch`);
+  }else{
+    S.sym+=4;
+    S.breathRe=S.fails?'fought':'pure';
+    opts([{t:'Zurückkommen.',go:finishGauntlet}],'Alle drei Runden durch');
+  }
+}
+function finishGauntlet(){
+  S.mode='talk';
+  line('n','Es wird still. Jonas sagt: "Kommt langsam zurück." Er sieht als Erster, dass Lauren weint, und tut genau nichts — er legt nur eine Decke neben sie und geht weiter. Deine Hände sind warm.');
+  opts([{t:'(sitzen bleiben)',go:leaveStudio}],'Zurück im Raum');
+}
 function waveWon(){
-  const i=S.run.wave;S.mode='talk';S.waves=Math.max(S.waves,i+1);
+  const i=S.run.wave;S.mode='talk';
   breathStop();SFX.win();
+  if(true){
+    S.run=null;
+    return retentionStart(i);
+  }
   if(i+1<NW){
     line('n',CHATTER[i]);
     opts([{t:'Weiteratmen.',go:()=>startWave(i+1)}],`Welle ${i+1} von ${NW} geschafft`);
@@ -2180,6 +2217,7 @@ const down=e=>{
     if(performance.now()-S.tram.t0>1200)S.tram.t0=Math.min(S.tram.t0,performance.now()-6600);
     if(e&&e.cancelable)e.preventDefault();return;}
   if(S.mode==='play'&&S.run){S.run.hold=true;skipTyping();if(e&&e.cancelable)e.preventDefault();return;}
+  if(S.mode==='hold'&&S.retn&&!S.retn.broke){S.retn.broke=true;if(e&&e.cancelable)e.preventDefault();return;}
   if(skipTyping()){if(e&&e.cancelable)e.preventDefault();return;}
   // Ein Klick ins Bild reicht, solange es nur einen Weg weiter gibt
   if(S.pending&&S.pending.length===1&&!S.typing){
@@ -2226,7 +2264,7 @@ function walkScene(){
 function walkSpaeti(){
   S.scene='street';S.pose='stand';S.jonas=false;S.mode='talk';S.teary=true;
   beat('l','Sie nickt Richtung Kiosk-Licht. "Isch brauche jetzt Zucker. Spezi?"',[
-    {t:'"Spezi. Aber die richtige von Paulaner."',go:()=>{S.sym+=2;rk('good');S.bottle=true;walk2();}},
+    {t:'"Spezi. Aber die richtige. Von Paulaner."',go:()=>{S.sym+=2;rk('good');S.bottle=true;reply('l','Sie: "Das ist doch alles dasselbe." Du: "Nein." Sie liest das Etikett, dreht die Flasche zweimal. "Okay. Du hast auch ein Feld."',walk2);}},
     {t:'"Zwei. Ich zahl."',go:()=>{S.sym+=1;rk('ok');S.bottle=true;reply('l','"Oh. Ein Mann, der am Kiosk groß aufspielt."',walk2);}},
     {t:'"Du hattest doch gerade erst den Riegel."',go:()=>{S.sym+=2;rk('good');S.bottle=true;reply('l','"Das war vor dem Atmen. Isch bin jetzt ein anderer Mensch und will Spezi."',walk2);}},
     {t:'"Ich trinke nicht."',go:()=>{S.cringe++;rk('meh');S.bottle=true;reply('l','"Okay, ja kein Problem." (Doch ein Problem.)',walk2);}}
@@ -2276,9 +2314,9 @@ function revealStep(n){
     tone(523.25,0.9,'sine',0.06);
     line('k','"Ich fänd\'s cool, wenn wir uns wiedersehen."');
     S.autoNext=null;
-    return opts([{t:'(weiter)',go:()=>{
+    return opts([{t:'(es stehen lassen)',go:()=>{
       line('n','Irgendwo in deinem Kopf läuft dazu Musik. ♫ "Ich könnt mich dran gewöhn, dich öfters zu sehen…" ♫');
-      opts([{t:'(weiter)',go:()=>revealStep(2)}],'Jetzt isses raus');
+      opts([{t:'(abwarten)',go:()=>revealStep(2)}],'Jetzt isses raus');
     }}],'Du sagst es einfach');
   }
   const score=S.sym-S.cringe*1.6+S.waves*1.4;
@@ -2286,24 +2324,24 @@ function revealStep(n){
     SFX.end();react('laugh');S.phoneHand=true;
     line('l','"Warte." Sie dreht dir ihr Handy hin. Du tippst deine Nummer ein.');
     opts([{t:'"Ja cool."',go:()=>{rk('good');line('l','"Samstag. Du bringst die Riegel, isch bringe die Spezi. Und komm mit dem Rad."');
-      opts([{t:'(weiter)',go:()=>startTram({yes:true,msg:'Samstag? — habe es endlisch abgeschickt. Riegel: du. Spezi: isch. E-Bike: nisch vergessen. ✦',after:'Sie winkt durch die Scheibe, mit beiden Händen, wie ein Kind.',morning:'Ihre Nachricht liest du erst am Morgen.'})}],'Ihre Tram kommt');}}],'Sie hatte es schon getippt');
+      opts([{t:'(sie ansehen)',go:()=>startTram({yes:true,msg:'Samstag? — habe es endlisch abgeschickt. Riegel: du. Spezi: isch. E-Bike: nisch vergessen. ✦',after:'Sie winkt durch die Scheibe, mit beiden Händen, wie ein Kind.',morning:'Ihre Nachricht liest du erst am Morgen.'})}],'Ihre Tram kommt');}}],'Sie hatte es schon getippt');
   }else if(score>=8){
     SFX.end();react('laugh');
     line('l','"Ja." Sie sagt es sofort, ohne die Pause, die du erwartet hast. "Aber diesmal ohne Jonas."');
     opts([{t:'"Ohne Jonas."',go:()=>{rk('good');line('l','"Bien. Isch schreib dir morgen. Wirklisch morgen, nicht Sonntag."');
-      opts([{t:'(weiter)',go:()=>startTram({yes:true,msg:'Guten Morgen. Ja, isch meinte es ernst. Ohne Jonas.',after:'Sie schaut dich durch die Scheibe an, bis die Tram um die Kurve ist.',morning:'Sie schreibt tatsächlich am nächsten Morgen. Um sieben. Du schläfst noch.'})}],'Ihre Tram kommt');}}],'Sie sagt ja');
+      opts([{t:'(sie ansehen)',go:()=>startTram({yes:true,msg:'Guten Morgen. Ja, isch meinte es ernst. Ohne Jonas.',after:'Sie schaut dich durch die Scheibe an, bis die Tram um die Kurve ist.',morning:'Sie schreibt tatsächlich am nächsten Morgen. Um sieben. Du schläfst noch.'})}],'Ihre Tram kommt');}}],'Sie sagt ja');
   }else if(score>=4){
     SFX.ok();react('scratch');
-    line('l','"Ehm." Sie überlegt wirklich, das sieht man. "Isch weiß es noch nisch. Aber isch weiß auch nisch Nein. Das ist besser als es klingt, glaub mir."');
+    line('l','"Ehm." Sie zieht die Ärmel über die Hände und zählt lautlos irgendwas ab. "Isch weiß es noch nisch. Aber isch weiß auch nisch Nein. Das ist besser als es klingt, glaub mir."');
     opts([{t:'"Das nehm ich."',go:()=>{rk('ok');line('l','"Gut. Dann lass isch disch das nehmen." Sie kramt in der Jacke und drückt dir den halben Riegel zurück in die Hand. "Anzahlung. Er war ja eh von dir."');
-      opts([{t:'(weiter)',go:()=>startTram({yes:true,msg:'Okay: Ja. Frag misch nisch, warum isch grinse.',card:'ZWEI MORGEN SPÄTER',after:'Sie hebt im Fenster kurz die Hand. Dann ist die Tram weg.',morning:'Zwei Tage lang nichts. Dann, am dritten Morgen, ohne Anlass: Sie kommt.'})}],'Ihre Tram kommt');}}],'Sie zögert ehrlich');
+      opts([{t:'(sie ansehen)',go:()=>startTram({yes:true,msg:'Okay: Ja. Frag misch nisch, warum isch grinse.',card:'ZWEI MORGEN SPÄTER',after:'Sie hebt im Fenster kurz die Hand. Dann ist die Tram weg.',morning:'Zwei Tage lang nichts. Dann, am dritten Morgen, ohne Anlass: Sie kommt.'})}],'Ihre Tram kommt');}}],'Sie zögert ehrlich');
   }else{
     SFX.endBad();react('roll');
     line('l','"Kevin." Sie sagt deinen Namen so, wie man einen Satz beendet. "Du bist lieb. Aber isch will das nisch nochmal, glaub isch."');
     opts([{t:'"Okay."',go:()=>{line('l',S.vers
         ? '"Okay." Sie nickt einmal. Dann, fast versöhnlich: "Das mit dem Fenster und dem Zeh behalte isch trotzdem. Das kommt in ein Gedicht. Du wirst nisch erwähnt."'
         : '"Okay." Sie nickt einmal. Dann, fast versöhnlich: "Der Abend kommt trotzdem in ein Gedicht. Du wirst nisch erwähnt."');
-      opts([{t:'(weiter)',go:()=>startTram({yes:false,after:'Sie steigt ein. Durch die Scheibe schaut sie noch kurz auf ihr Handy, nicht zu dir. Es ist nicht böse gemeint. Es ist nur zu Ende.',morning:'Am nächsten Morgen denkst du kurz an sie, dann an Frühstück. In dieser Reihenfolge.'})}],'Ihre Tram kommt');}}],'Sie sagt es klar');
+      opts([{t:'(sie ansehen)',go:()=>startTram({yes:false,after:'Sie steigt ein. Durch die Scheibe schaut sie noch kurz auf ihr Handy, nicht zu dir. Es ist nicht böse gemeint. Es ist nur zu Ende.',morning:'Am nächsten Morgen denkst du kurz an sie, dann an Frühstück. In dieser Reihenfolge.'})}],'Ihre Tram kommt');}}],'Sie sagt es klar');
   }
 }
 
@@ -2381,7 +2419,7 @@ function reset(){
   S.pose='stand';S.mode='talk';S.run=null;ti=0;breathStop();
   S.tram=null;S.gone=false;S.mood='neutral';S.moodT=0;S.moodStart=0;
   S.vers=false;S.breathRe=null;S.riegel=false;S.kbar=false;S.barGiven=false;S.bottle=false;S.teary=false;
-  S.cringeWarned=false;S.phone=null;S.bed=false;S.ride=null;S.autoNext=null;S.autoT=0;S.who='n';S.phoneHand=false;
+  S.cringeWarned=false;S.phone=null;S.bed=false;S.ride=null;S.retn=null;S.autoNext=null;S.autoT=0;S.who='n';S.phoneHand=false;
   S.mode='title';S.full='';S.typing=false;
   opts([],'Ein Abend in München — '+(TOUCH?'tipp':'klick')+' ins Bild');
 }
@@ -2434,6 +2472,10 @@ function frame(t){
     S.breath=r.v/100;
     breathUpdate(S.breath,r.hold,r.inband);
     if(r.focus>=r.need)waveWon(); else if(r.focus<=0)waveLost();
+  }else if(S.mode==='hold'&&S.retn){
+    S.breath=0.12;                                  // Lunge leer, alles hält
+    const r=S.retn, el=t-r.t0;
+    if(r.broke||el>=r.need){retentionDone();}
   }else{
     S.breath=0.5+0.5*Math.sin(t/900);
   }
@@ -2446,8 +2488,8 @@ function frame(t){
   }
 
   // Lauren
-  const lb=(S.mode==='play')?0.5+0.5*Math.sin(t/1300):0.5+0.5*Math.sin(t/1050);
-  const mood=(S.mode==='play')?'medi':((t<S.moodT)?S.mood:'neutral');
+  const lb=(S.mode==='hold')?0.12:(S.mode==='play')?0.5+0.5*Math.sin(t/1300):0.5+0.5*Math.sin(t/1050);
+  const mood=(S.mode==='play'||S.mode==='hold')?'medi':((t<S.moodT)?S.mood:'neutral');
   const mage=(performance.now()-S.moodStart)/1000;
   let lx,ly,showL=!S.gone&&S.mode!=='intro'&&S.mode!=='title'&&!S.bed;
   if(S.scene==='studio'){ lx=S.pose==='sit'?300:278; ly=S.pose==='sit'?114:56; }
@@ -2526,9 +2568,9 @@ function frame(t){
     const kfeet=kSit?ky+134:Math.round(ky+89*ksc);
     PS=1;px(kx+10,kfeet,Math.round(38*ksc),7,'rgba(10,6,20,0.32)');
     const kProp=(S.scene==='street'&&S.bottle)?'bottle':(S.scene==='front'&&S.kbar)?'bar':null;
-    const kBreath=(S.mode==='play')?S.breath:0.5+0.5*Math.sin(t/1000+2);
+    const kBreath=(S.mode==='play'||S.mode==='hold')?S.breath:0.5+0.5*Math.sin(t/1000+2);
     S._kx=kx;
-    figure(kx,ky,ksc,KEVFIG,t,kBreath,kSit,0.6,false,(S.mode==='play')?'medi':'neutral',0,S.typing&&S.who==='k',false,kProp,1,S.scene==='studio');
+    figure(kx,ky,ksc,KEVFIG,t,kBreath,kSit,0.6,false,((S.mode==='play'||S.mode==='hold'))?'medi':'neutral',0,S.typing&&S.who==='k',false,kProp,1,S.scene==='studio');
   }
 
   if(showL){
@@ -2541,7 +2583,7 @@ function frame(t){
     const lProp=S.phoneHand?'phone':(S.scene==='front'&&S.riegel)?'riegel':(S.scene==='street'&&S.bottle)?'bottle':null;
     figure(lx,ly,sc,LAUREN,t,lb,S.scene==='studio'&&S.pose==='sit',1.4,false,mood,mage,lTalk,lWalk,lProp,-1,S.scene==='studio');
     // Tränen — während der Wellen (ab Welle 2) UND danach, deutlich sichtbar
-    const cryNow=(S.teary&&S.scene==='street'&&S.mode!=='tram')||(S.mode==='play'&&S.run&&S.run.wave>=1);
+    const cryNow=(S.teary&&S.scene==='street'&&S.mode!=='tram')||(S.mode==='play'&&S.run&&S.run.wave>=1)||(S.mode==='hold'&&S.retn&&S.retn.i>=1);
     if(cryNow){
       PS=1;
       const t1x=lx+Math.round(15*sc), t2x=lx+Math.round(29*sc), ty0=ly+Math.round(20.5*sc);
@@ -2579,6 +2621,21 @@ function frame(t){
     const lbl=`WELLE ${r.wave+1}/${NW}`;
     ctx.fillStyle='#000';for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++)if(a||b)ctx.fillText(lbl,21+a,252+b);
     ctx.fillStyle='#ffe066';ctx.fillText(lbl,21,252);
+  }
+
+  // Retention-Anzeige: ein Balken, der sich füllt, während niemand atmet
+  if(S.mode==='hold'&&S.retn){
+    PS=1.5;
+    const r=S.retn, p=Math.min(1,(t-r.t0)/r.need), rest=Math.max(0,Math.ceil((r.need-(t-r.t0))/1000));
+    px(72,182,176,13,'rgba(0,0,0,0.7)');
+    px(74,184,172,9,'#141428');
+    px(74,184,Math.round(172*p),9,'#8fe6d2');
+    PS=1;
+    ctx.font='bold 11px ui-monospace,"Courier New",monospace';ctx.textBaseline='top';ctx.textAlign='center';
+    const lbl='HALTEN · '+rest+'s';
+    ctx.fillStyle='#000';for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++)if(a||b)ctx.fillText(lbl,W/2+a,262+b);
+    ctx.fillStyle='#8fe6d2';ctx.fillText(lbl,W/2,262);
+    ctx.textAlign='left';
   }
 
   // Titelbild liegt als eigenes Overlay über allem (siehe #title)

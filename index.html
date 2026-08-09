@@ -40,7 +40,7 @@
   /* Titelbild: eigenes Key-Art, am Handy bildschirmfüllend */
   #title{position:fixed;inset:0;background:#080418;display:none;align-items:center;justify-content:center;z-index:9;cursor:pointer}
   #title.on{display:flex}
-  #tc{width:100%;height:100%;display:block}
+  #tc{display:block;width:auto;height:auto;max-width:100%;max-height:100%;border:2px solid #16162a;image-rendering:auto}
   /* Das Handy im Vorspiel: echtes HTML, damit die Schrift scharf bleibt */
   #phone{display:none;background:#07060f;border:2px solid #16162a;border-bottom:none;padding:14px 0 10px;justify-content:center}
   #phone.on{display:flex}
@@ -147,8 +147,17 @@ const tcv=document.getElementById('tc'), tx=tcv.getContext('2d');
 tx.imageSmoothingEnabled=false;
 const $title=document.getElementById('title');
 function fitTitleCanvas(){
-  const w=Math.max(320,Math.min(1600,Math.round(innerWidth))),
-        h=Math.max(320,Math.min(1000,Math.round(innerHeight)));
+  // Am Desktop nur so groß wie die Spielfläche, am Handy bildschirmfüllend
+  let w,h;
+  if(innerWidth>700){
+    w=Math.min(960,Math.round(innerWidth*0.94));
+    h=Math.round(w/1.6);
+    const maxH=Math.round(innerHeight*0.86);
+    if(h>maxH){h=maxH;w=Math.round(h*1.6);}
+  }else{
+    w=Math.round(innerWidth);h=Math.round(innerHeight);
+  }
+  w=Math.max(320,w);h=Math.max(300,h);
   if(tcv.width!==w||tcv.height!==h){tcv.width=w;tcv.height=h;tx.imageSmoothingEnabled=false;}
 }
 addEventListener('resize',fitTitleCanvas);

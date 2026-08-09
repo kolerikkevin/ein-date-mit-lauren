@@ -157,7 +157,7 @@ const BG_FRONT='bilder/bg-front.jpg';
 const bgFront=new Image();bgFront.src=BG_FRONT;
 const bgStudio=new Image();bgStudio.src='bilder/bg-studio.jpg';
 const bgStreet=new Image();bgStreet.src='bilder/bg-street.jpg';
-const bgBed=new Image();bgBed.src='bilder/bg-bed.jpg';
+const bgBed=new Image();bgBed.src='bilder/bg-bed.jpg?v2';   // v2: Kevins echtes Zimmer
 /* Gemalte Bühne einpassen (cover-Zuschnitt, Ausschnitt über anchor steuerbar) */
 function drawBG(img,anchor){
   PS=1;
@@ -1484,9 +1484,9 @@ function sceneBed(t){
   ctx.font='bold 13px ui-monospace,"Courier New",monospace';ctx.textBaseline='top';
   for(let i=0;i<3;i++){
     const k=(zf+i)%3, a2=1-k/3;
-    ctx.globalAlpha=Math.max(0,a2*0.8);
-    ctx.fillStyle='#3a2a1e';ctx.fillText('z',132+i*13+1,96-k*17+1);
-    ctx.fillStyle='#f0e2c8';ctx.fillText('z',132+i*13,96-k*17);
+    ctx.globalAlpha=Math.max(0,a2*0.85);
+    ctx.fillStyle='#fdf3dc';ctx.fillText('z',214+i*13+1,140-k*17+1);   // heller Grund → dunkle Schrift
+    ctx.fillStyle='#6b4a2a';ctx.fillText('z',214+i*13,140-k*17);
   }
   ctx.globalAlpha=1;
 }

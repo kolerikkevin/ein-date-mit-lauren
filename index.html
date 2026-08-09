@@ -194,10 +194,10 @@ const grainC=document.createElement('canvas');grainC.width=grainC.height=64;
 let grainPat=null;
 /* Lichtstimmung je Szene — dieselben Quellen wie im gemalten Bild */
 const FGLIGHT={
-  studio:{shade:'rgba(52,32,80,0.20)',warm:'rgba(255,168,72,0.26)',x:0.50,y:0.42,r:0.55},
-  street:{shade:'rgba(40,30,72,0.24)',warm:'rgba(255,190,104,0.26)',x:0.22,y:0.52,r:0.50},
-  front :{shade:'rgba(44,32,84,0.22)',warm:'rgba(255,180,88,0.28)',x:0.60,y:0.52,r:0.52},
-  def   :{shade:'rgba(44,32,80,0.16)',warm:'rgba(255,190,110,0.20)',x:0.50,y:0.50,r:0.60}
+  studio:{shade:'rgba(52,32,80,0.10)',warm:'rgba(255,168,72,0.16)',x:0.50,y:0.42,r:0.55},
+  street:{shade:'rgba(40,30,72,0.13)',warm:'rgba(255,190,104,0.16)',x:0.22,y:0.52,r:0.50},
+  front :{shade:'rgba(44,32,84,0.12)',warm:'rgba(255,180,88,0.18)',x:0.60,y:0.52,r:0.52},
+  def   :{shade:'rgba(44,32,80,0.09)',warm:'rgba(255,190,110,0.13)',x:0.50,y:0.50,r:0.60}
 };
 function fgBegin(){
   if(fgOn)return;
@@ -225,7 +225,7 @@ function fgEnd(scene){
   mkx.setTransform(1,0,0,1,0,0);
   mkx.globalCompositeOperation='copy';mkx.drawImage(fgc,0,0);
   fgx.save();
-  fgx.globalCompositeOperation='overlay';fgx.globalAlpha=0.20;
+  fgx.globalCompositeOperation='overlay';fgx.globalAlpha=0.12;
   fgx.fillStyle=grainPat;fgx.fillRect(0,0,fw,fh);
   fgx.globalAlpha=1;
   fgx.globalCompositeOperation='destination-in';fgx.drawImage(mkc,0,0);
@@ -2569,6 +2569,23 @@ function schedule(){
 setInterval(()=>{ if(performance.now()-last>200) frame(performance.now()); },100);
 
 window.__S=S;window.__dbg={S,portraits,phoneShow,renderPortrait,figure};   // Debug-Griff: Szenen direkt anspringen
+/* Referenzblatt der drei Figuren — Vorlage, wenn eine KI sie neu malen soll */
+window.__sheet=()=>{
+  const s=5.2, W2=Math.round(48*s*3+120), H2=Math.round(92*s+80);
+  const o=document.createElement('canvas');o.width=W2;o.height=H2;
+  const oc=o.getContext('2d');
+  oc.fillStyle='#f2ece0';oc.fillRect(0,0,W2,H2);
+  const old=CTX(),oldPS=PS;SETCTX(oc);PS=1;
+  const cast=[[LAUREN,-1,false],[KEVFIG,1,true],[JONAS,0,true]];
+  cast.forEach(([P,face,socks],i)=>{
+    figure(30+i*(48*s+30),40,s,P,1200,0.5,false,i*0.7,true,'neutral',0,false,false,null,face,socks);
+  });
+  SETCTX(old);PS=oldPS;
+  let ta=document.getElementById('dump');
+  if(!ta){ta=document.createElement('textarea');ta.id='dump';ta.style.cssText='position:fixed;left:-9999px';document.body.appendChild(ta);}
+  ta.value=o.toDataURL('image/png');
+  return ta.value.length;
+};
 reset();
 schedule();
 })();
